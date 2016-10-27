@@ -5,18 +5,20 @@ FIND_PACKAGE(OpenSSL)
 
 INCLUDE_DIRECTORIES(
     ${OPENSSL_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 SET(CMAKE_SHARED_LINKER_FLAGS "-L${OPENSSL_LIBRARIES}")
+LINK_DIRECTORIES(${OPENSSL_LIB_DIR})
 
 SET(SRCS
-    h2get.c
-    h2get_mruby.c
-    h2get_read.c
-    hpack.c
-    read_bits.c
-    plain.c
-    ssl.c)
+    src/h2get.c
+    src/h2get_mruby.c
+    src/h2get_read.c
+    src/hpack.c
+    src/read_bits.c
+    src/plain.c
+    src/ssl.c)
 
 IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND SANITIZE)
 	SET(CMAKE_C_FLAGS "-fsanitize=address")
@@ -36,16 +38,15 @@ ENABLE_TESTING()
 
 MACRO(DECL_TEST _NAME)
     ADD_EXECUTABLE(${_NAME} ${ARGN})
-    MESSAGE("Adding new test ${_NAME}, sources: ${ARGN}")
     SET_TARGET_PROPERTIES(${_NAME} PROPERTIES COMPILE_FLAGS "-DTEST -D${_NAME}=main")
     ADD_TEST(${_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${_NAME})
 ENDMACRO()
 
-DECL_TEST(test_decode_int hpack.c read_bits.c)
-DECL_TEST(test_read_bits read_bits.c)
-DECL_TEST(test_decode_string hpack.c read_bits.c)
-DECL_TEST(test_decode_header_frame hpack.c read_bits.c hpack.c)
-DECL_TEST(test_decode_header_successive_frames hpack.c read_bits.c hpack.c)
+DECL_TEST(test_decode_int src/hpack.c src/read_bits.c)
+DECL_TEST(test_read_bits src/read_bits.c)
+DECL_TEST(test_decode_string src/hpack.c src/read_bits.c)
+DECL_TEST(test_decode_header_frame src/hpack.c src/read_bits.c src/hpack.c)
+DECL_TEST(test_decode_header_successive_frames src/hpack.c src/read_bits.c src/hpack.c)
 
 ADD_CUSTOM_TARGET(check ${CMAKE_COMMAND} -E env CTEST_OUTPUT_ON_FAILURE=1
 	${CMAKE_CTEST_COMMAND} -C $<CONFIG> --verbose
