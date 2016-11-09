@@ -48,7 +48,6 @@ RENDERER(priority)
 RENDERER(rst_stream)
 RENDERER(push_promise)
 RENDERER(ping)
-RENDERER(window_update)
 RENDERER(continuation)
 
 #undef RENDERER
@@ -92,6 +91,13 @@ static void h2get_frame_render_headers(struct h2get_ctx *ctx, struct h2get_buf *
         h2get_buf_printf(out, "\n\t'%.*s' => '%.*s'", hdh->key.len, hdh->key.buf, hdh->value.len, hdh->value.buf);
         h2get_decoded_header_free(hdh);
     }
+    return;
+}
+
+static void h2get_frame_render_window_update(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+                                             char *payload, size_t plen)
+{
+    h2get_buf_printf(out, "\n\tincrement => %lu", ntohl(*(uint32_t *)payload) >> 1);
     return;
 }
 
@@ -228,6 +234,11 @@ int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, 
     }
 
     plen = len24_toh(header->len);
+    if (!plen) {
+        buf->buf = NULL;
+        buf->len = 0;
+        return 0;
+    }
     payload = malloc(plen);
     size_t to_read = plen;
     do {

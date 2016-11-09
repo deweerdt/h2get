@@ -385,6 +385,34 @@ int h2get_send_windows_update(struct h2get_ctx *ctx, uint32_t stream_id, uint32_
     return 0;
 }
 
+int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_h2_priority *iprio, const char **err)
+{
+    int ret;
+    struct {
+        struct h2get_h2_header h;
+        struct h2get_h2_priority prio;
+    } __attribute__((packed)) prio = {{
+        0,
+    }};
+
+    prio.h.len = sizetoh2len(sizeof(prio.prio));
+    prio.h.type = H2GET_HEADERS_PRIORITY;
+    prio.h.stream_id = htonl(stream_id) >> 1;
+    prio.prio = *iprio;
+    dump_zone(&prio.prio, sizeof(prio.prio));
+
+    if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
+        *err = "Not connected";
+        return -1;
+    }
+    ret = ctx->ops->write(&ctx->conn, &H2GET_BUF(&prio, sizeof(prio)), 1);
+    if (ret < 0) {
+        *err = "Write failed";
+        return -1;
+    }
+    return 0;
+}
+
 int h2get_send_settings(struct h2get_ctx *ctx, const char **err)
 {
     int ret;
@@ -399,6 +427,48 @@ int h2get_send_settings(struct h2get_ctx *ctx, const char **err)
     ret = ctx->ops->write(&ctx->conn, &H2GET_BUF(&default_settings_frame, sizeof(default_settings_frame)), 1);
     if (ret < 0) {
         *err = "Write failed";
+        return -1;
+    }
+
+    return 0;
+}
+
+int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2get_h2_priority prio, const char **err)
+{
+    int ret;
+    size_t plen = 0;
+    char *whead, *payload;
+
+    plen += 1 + 1;                          /* GET and https */
+    plen += 3 + 5 + strlen(path);           /* :path */
+    plen += 3 + 10 + ctx->url.raw.host.len; /* :authority */
+
+    payload = alloca(plen);
+    whead = payload;
+
+    *whead++ = 0x82; /* GET */
+    *whead++ = 0x87; /* https */
+    whead = h2get_hpack_add_header(&H2GET_BUFLIT(":authority"), &ctx->url.raw.host, whead);
+    whead = h2get_hpack_add_header(&H2GET_BUFLIT(":path"), &H2GET_BUFSTR((char *)path), whead);
+
+    struct h2get_h2_header header_get = {
+        0, H2GET_HEADERS_HEADERS, H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM | H2GET_HEADERS_HEADERS_FLAG_END_HEADERS, 0, 0,
+    };
+    struct h2get_buf bufs[3];
+    header_get.len = sizetoh2len(plen + sizeof(prio));
+    header_get.stream_id = htonl(sid) >> 1;
+    ctx->max_open_sid_client = (sid + 2);
+    bufs[0] = H2GET_BUF(&header_get, sizeof(header_get));
+    bufs[1] = H2GET_BUF(&prio, sizeof(prio));
+    bufs[2] = H2GET_BUF(payload, plen);
+
+    if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
+        *err = "Not connected";
+        return -1;
+    }
+    ret = ctx->ops->write(&ctx->conn, bufs, 3);
+    if (ret < 0) {
+        *err = "Write failed\n";
         return -1;
     }
 

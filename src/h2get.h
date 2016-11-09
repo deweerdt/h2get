@@ -241,6 +241,11 @@ struct h2get_h2_window_update {
     unsigned int increment : 31;
 } __attribute__((packed));
 
+struct h2get_h2_priority {
+    uint32_t excl_dep_stream_id;
+    unsigned int weight : 8;
+} __attribute__((packed));
+
 struct h2get_h2_goaway {
     unsigned int reserved : 1;
     unsigned int last_stream_id : 31;
@@ -256,10 +261,12 @@ struct h2get_h2_settings;
 int h2get_ctx_on_peer_settings(struct h2get_ctx *ctx, struct h2get_h2_header *h, char *payload, int plen);
 int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **err);
 int h2get_close(struct h2get_ctx *ctx);
+int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_h2_priority *prio, const char **err);
 int h2get_send_settings(struct h2get_ctx *ctx, const char **err);
 int h2get_send_prefix(struct h2get_ctx *ctx, const char **err);
 int h2get_send_windows_update(struct h2get_ctx *ctx, uint32_t stream_id, uint32_t increment, const char **err);
 int h2get_get(struct h2get_ctx *ctx, const char *path, const char **err);
+int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2get_h2_priority prio, const char **err);
 const char *h2get_render_error_code(uint32_t err);
 
 #endif /* H2GET_H_ */
