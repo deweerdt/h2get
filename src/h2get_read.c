@@ -2,7 +2,6 @@
 #include <stdlib.h>
 
 #include "h2get.h"
-#include "h2get_priv.h"
 #include "hpack.h"
 
 #include <ctype.h>

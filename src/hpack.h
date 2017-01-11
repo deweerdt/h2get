@@ -1,6 +1,8 @@
 #ifndef HPACK_H__
 #define HPACK_H__
 
+#include "h2get.h"
+
 struct h2get_decoded_header {
     struct h2get_buf key;
     struct h2get_buf value;
@@ -8,13 +10,6 @@ struct h2get_decoded_header {
 };
 #define list_to_dh(ln) (container_of((ln), struct h2get_decoded_header, node))
 
-struct h2get_hpack_ctx {
-    struct list dyn_table;
-    size_t dyn_size;
-    size_t max_dyn_size;
-};
-
-struct h2get_hpack_ctx;
 void h2get_hpack_ctx_init(struct h2get_hpack_ctx *hhc, size_t dyn_size);
 void h2get_hpack_ctx_empty(struct h2get_hpack_ctx *hhc);
 void h2get_hpack_ctx_resize(struct h2get_hpack_ctx *hhc, size_t dyn_size);

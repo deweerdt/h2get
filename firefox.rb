@@ -1,7 +1,7 @@
 begin
     to_process = []
     h2g = H2.new
-    h2g.connect('https://127.0.0.1:8181')
+    h2g.connect('https://www.fastly.com')
     h2g.send_prefix()
     h2g.send_settings()
     # Ack settings

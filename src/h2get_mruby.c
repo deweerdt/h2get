@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 #include "h2get.h"
-#include "h2get_priv.h"
 
 #include "mruby.h"
 #include "mruby/array.h"

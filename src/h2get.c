@@ -17,7 +17,7 @@
 #include <mruby/compile.h>
 
 #include "h2get.h"
-#include "h2get_priv.h"
+#include "hpack.h"
 
 #define sizetoh2len(l) ((htonl(l)) >> 8)
 
