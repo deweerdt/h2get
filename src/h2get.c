@@ -34,7 +34,9 @@ static struct h2get_ops *h2get_ctx_get_ops(struct h2get_ctx *ctx, enum h2get_tra
     int i;
     for (i = 0; i < ctx->nr_ops; i++) {
         if (ctx->registered_ops[i].xprt == xprt) {
-            ctx->xprt_priv = ctx->registered_ops[i].init();
+            if (ctx->registered_ops[i].init) {
+                ctx->xprt_priv = ctx->registered_ops[i].init();
+            }
             return &ctx->registered_ops[i];
         }
     }
@@ -59,7 +61,10 @@ void h2get_ctx_init(struct h2get_ctx *ctx)
     ctx->max_open_sid_client = 1;
     ctx->max_open_sid_server = 0;
 
-    h2get_ctx_register_ops(ctx, &plain_ops);
+    if (0) {
+        //TODO: support non-TLS connections
+        h2get_ctx_register_ops(ctx, &plain_ops);
+    }
     h2get_ctx_register_ops(ctx, &ssl_ops);
 
     h2get_hpack_ctx_init(&ctx->own_hpack, ctx->own_settings.header_table_size);
@@ -258,7 +263,7 @@ int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **
     }
 
     if (!url.raw.scheme.buf) {
-        xprt = H2GET_TRANSPORT_PLAIN;
+        xprt = H2GET_TRANSPORT_SSL;
     } else {
         if (!h2get_buf_cmp(&url.raw.scheme, &H2GET_BUFSTR("http"))) {
             xprt = H2GET_TRANSPORT_PLAIN;
@@ -525,10 +530,12 @@ static void usage(void)
 
 int main(int argc, char **argv)
 {
-    if (argc != 1 && argc < 2) {
+    int extra_args;
+    if (argc < 1) {
         usage();
     }
-    run_mruby(argv[1], argc - 2, &argv[2]);
+    extra_args = (argc - 2) >= 0;
+    run_mruby(argv[1], extra_args ? argc - 2 : 0, extra_args ? &argv[2] : NULL);
 
     exit(EXIT_SUCCESS);
 }

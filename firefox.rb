@@ -1,14 +1,14 @@
 begin
     to_process = []
     h2g = H2.new
-    h2g.connect('https://www.fastly.com')
+    host = ARGV[0] || "www.fastly.com"
+    h2g.connect(host)
     h2g.send_prefix()
     h2g.send_settings()
     # Ack settings
     while true do
         f = h2g.read(-1)
-        p f.to_s
-        p f.flags
+        puts f.to_s
         if f.type == "SETTINGS" and (f.flags & 1 == 1) then
             next
         elsif f.type == "SETTINGS" then
