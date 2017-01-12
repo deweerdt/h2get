@@ -336,6 +336,9 @@ uint8_t *decode_string(uint8_t *buf, uint8_t *end, struct h2get_buf *ret)
     buf = new_buf;
 
     if (!huffman) {
+        if (buf + enc_len > end) {
+            return NULL;
+        }
         ret->buf = malloc(enc_len);
         if (!ret->buf) {
             return NULL;
