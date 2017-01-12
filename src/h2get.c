@@ -404,7 +404,6 @@ int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_
     prio.h.type = H2GET_HEADERS_PRIORITY;
     prio.h.stream_id = htonl(stream_id) >> 1;
     prio.prio = *iprio;
-    dump_zone(&prio.prio, sizeof(prio.prio));
 
     if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
         *err = "Not connected";

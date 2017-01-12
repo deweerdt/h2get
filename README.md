@@ -66,7 +66,11 @@ Returns the frame flags field
 
 Returns the length of the frame's payload
 
-### Frame.len
+### Frame.is_end_stream
+
+Returns true if the `END_STREAM` flag is set
+
+### Frame.stream_id
 
 Returns the length of the frame's stream_id
 

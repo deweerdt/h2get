@@ -435,6 +435,17 @@ static mrb_value h2get_mruby_frame_stream_id(mrb_state *mrb, mrb_value self)
     return mrb_fixnum_value(ntohl(h2g_frame->header.stream_id << 1));
 }
 
+static mrb_value h2get_mruby_frame_is_end_stream(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby_frame *h2g_frame;
+
+    h2g_frame = mrb_data_get_ptr(mrb, self, &h2get_mruby_frame_type);
+    if (h2g_frame->header.type != H2GET_HEADERS_DATA && h2g_frame->header.type != H2GET_HEADERS_HEADERS) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "time interval must be positive");
+    }
+    return mrb_bool_value(h2g_frame->header.flags & H2GET_HEADERS_HEADERS_FLAG_END_STREAM);
+}
+
 static mrb_value h2get_mruby_priority_init(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby_priority *h2p;
@@ -510,6 +521,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby_frame, "flags", h2get_mruby_frame_flags, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "len", h2get_mruby_frame_len, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "stream_id", h2get_mruby_frame_stream_id, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_frame, "is_end_stream", h2get_mruby_frame_is_end_stream, MRB_ARGS_ARG(0, 0));
 
     /* Priority */
     mrb_define_method(mrb, h2get_mruby_priority, "initialize", h2get_mruby_priority_init, MRB_ARGS_ARG(3, 0));
