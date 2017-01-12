@@ -467,6 +467,8 @@ static int init_via_index(struct h2get_hpack_ctx *hhc, struct h2get_decoded_head
         index -= ARRAY_SIZE(static_header_table);
         assert(index >= 0);
         dynh = get_dyn_header(hhc, index);
+        if (!dynh)
+            return -1;
         *newh = *dynh;
         newh->key.buf = memdup(dynh->key.buf, dynh->key.len);
         newh->value.buf = memdup(dynh->value.buf, dynh->value.len);
@@ -531,7 +533,8 @@ static struct h2get_decoded_header *add_one_header(struct h2get_hpack_ctx *hhc, 
     struct h2get_buf hbuf;
 
     if (index) {
-        init_via_index(hhc, newh, index);
+        if (init_via_index(hhc, newh, index) < 0)
+            goto err;
     } else {
         *buf += 1;
         new_buf = decode_string(*buf, end, &hbuf);
