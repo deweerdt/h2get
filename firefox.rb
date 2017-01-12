@@ -19,7 +19,7 @@ begin
         end
     end
     to_process.each do |f|
-        p f.type
+        puts f.to_s
     end
 
     h2g.send_priority(3, 0, 1, 201)
@@ -29,14 +29,12 @@ begin
     h2g.send_priority(11, 3, 0, 1)
     prio_low = H2Priority.new(0, 0, 16)
     prio_high = H2Priority.new(0, 0, 32)
-    #sleep 6
-    #exit 0
     h2g.getp("/big?1", 15, prio_low)
     h2g.getp("/big?2", 17, prio_high)
     while true
         f = h2g.read(-1)
         puts "type:#{f.type}, stream_id:#{f.stream_id}, len:#{f.len}"
-        if f.type == "GOAWAY" then
+        if f.type == "GOAWAY" or f.type == "SETTINGS" then
             puts f.to_s
         end
         if f.type == "DATA" then
