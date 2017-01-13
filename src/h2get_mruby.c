@@ -212,10 +212,8 @@ static mrb_value h2get_mruby_send_priority(mrb_state *mrb, mrb_value self)
 
     mrb_get_args(mrb, "iiii", &mrb_stream_id, &mrb_dep_stream_id, &mrb_exclusive, &mrb_weight);
     stream_id = (uint32_t)mrb_stream_id;
-    if (mrb_exclusive) {
-        mrb_dep_stream_id |= 0x80000000;
-    }
-    prio.excl_dep_stream_id = (htonl(mrb_dep_stream_id));
+    h2get_h2_priority_set_exclusive(&prio, mrb_exclusive);
+    h2get_h2_priority_set_dep_stream_id(&prio, mrb_dep_stream_id);
     prio.weight = (uint8_t)mrb_weight;
 
     h2g = (struct h2get_mruby *)DATA_PTR(self);

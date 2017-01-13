@@ -74,6 +74,13 @@ static void h2get_frame_render_headers(struct h2get_ctx *ctx, struct h2get_buf *
             h2get_buf_printf(out, "PRIORITY ");
     }
 
+    if (h->flags & H2GET_HEADERS_HEADERS_PRIORITY) {
+	    struct h2get_h2_priority *prio = (struct h2get_h2_priority *)payload;
+	    payload += sizeof(*prio);
+	    plen -= sizeof(*prio);
+	    h2get_buf_printf(out, "\nPriority: %sexclusive, stream dependency: %lu, weight: %u", h2get_h2_priority_is_exclusive(prio) ? "": "not ", h2get_h2_priority_get_dep_stream_id(prio), prio->weight);
+    }
+
     list_init(&headers);
 
     ret = h2get_hpack_decode(&ctx->own_hpack, payload, plen, &headers);

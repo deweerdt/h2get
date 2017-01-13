@@ -247,6 +247,33 @@ struct h2get_h2_priority {
     unsigned int weight : 8;
 } __attribute__((packed));
 
+static inline void h2get_h2_priority_set_dep_stream_id(struct h2get_h2_priority *prio, uint32_t dep_stream_id)
+{
+    uint32_t excl_dep_stream_id = ntohl(prio->excl_dep_stream_id);
+    excl_dep_stream_id = (excl_dep_stream_id & 0x80000000) | (dep_stream_id | 0x7fffffff);
+    prio->excl_dep_stream_id = htonl(excl_dep_stream_id);
+}
+
+static inline uint32_t h2get_h2_priority_get_dep_stream_id(struct h2get_h2_priority *prio)
+{
+    uint32_t excl_dep_stream_id = ntohl(prio->excl_dep_stream_id);
+    return ntohl(excl_dep_stream_id & 0x7fffffff);
+}
+
+static inline void h2get_h2_priority_set_exclusive(struct h2get_h2_priority *prio, int exclusive)
+{
+    uint32_t excl_dep_stream_id = ntohl(prio->excl_dep_stream_id);
+    if (exclusive) {
+        excl_dep_stream_id &= 0x80000000;
+    }
+    prio->excl_dep_stream_id = htonl(excl_dep_stream_id);
+}
+
+static inline int h2get_h2_priority_is_exclusive(struct h2get_h2_priority *prio)
+{
+    return !!(ntohl(prio->excl_dep_stream_id) & (0x80000000));
+}
+
 struct h2get_h2_goaway {
     unsigned int reserved : 1;
     unsigned int last_stream_id : 31;
