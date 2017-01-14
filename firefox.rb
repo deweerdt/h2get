@@ -42,17 +42,17 @@ begin
         puts "type:#{f.type}, stream_id:#{f.stream_id}, len:#{f.len}, flags:#{f.flags}"
         if f.type == "GOAWAY" then
             puts f.to_s
-        end
-        if f.type == "SETTINGS" then
+        elsif f.type == "PING" then
+            f.ack()
+        elsif f.type == "SETTINGS" then
             puts f.to_s
-        end
-        if f.type == "DATA" and f.len > 0 then
+        elsif f.type == "DATA" and f.len > 0 then
             h2g.send_window_update(0, f.len)
             h2g.send_window_update(f.stream_id, f.len)
-        end
-        if f.type == "HEADERS" then
+        elsif f.type == "HEADERS" then
             puts f.to_s
         end
+
         if f.type == "DATA" or f.type == "HEADERS" then
             if f.is_end_stream
                 open_streams.delete(f.stream_id)

@@ -74,6 +74,10 @@ Returns true if the `END_STREAM` flag is set
 
 Returns the length of the frame's stream_id
 
+### Frame.ack()
+
+For types that support it (`PING`, `SETTINGS`) send a ack frame
+
 ## Priority object
 
 ### Priority.new(dependent_sid, exclusive, weight)

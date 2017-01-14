@@ -290,6 +290,7 @@ int h2get_ctx_on_peer_settings(struct h2get_ctx *ctx, struct h2get_h2_header *h,
 int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **err);
 int h2get_close(struct h2get_ctx *ctx);
 int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_h2_priority *prio, const char **err);
+int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err);
 int h2get_send_settings(struct h2get_ctx *ctx, const char **err);
 int h2get_send_prefix(struct h2get_ctx *ctx, const char **err);
 int h2get_send_windows_update(struct h2get_ctx *ctx, uint32_t stream_id, uint32_t increment, const char **err);

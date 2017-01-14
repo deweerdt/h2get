@@ -417,6 +417,36 @@ int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_
     return 0;
 }
 
+int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err)
+{
+    int ret;
+    struct {
+        struct h2get_h2_header header;
+        char payload[8];
+    } ping_frame = {
+        { 0, H2GET_HEADERS_PING, 0, 0, 0 },
+    };
+
+    ping_frame.header.len = sizetoh2len(sizeof(ping_frame.payload));
+    if (payload) {
+        ping_frame.header.flags = 1;
+        memcpy(ping_frame.payload, payload, sizeof(ping_frame.payload));
+    }
+
+    if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
+        *err = "Not connected";
+        return -1;
+    }
+    dump_zone(&ping_frame, sizeof(ping_frame));
+    ret = ctx->ops->write(&ctx->conn, &H2GET_BUF(&ping_frame, sizeof(ping_frame)), 1);
+    if (ret < 0) {
+        *err = "Write failed";
+        return -1;
+    }
+
+    return 0;
+}
+
 int h2get_send_settings(struct h2get_ctx *ctx, const char **err)
 {
     int ret;

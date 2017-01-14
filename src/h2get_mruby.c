@@ -201,6 +201,36 @@ static mrb_value h2get_mruby_send_prefix(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2get_mruby_send_ping(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    const char *err;
+    int ret;
+    mrb_value *argv;
+    mrb_int argc;
+    int iargc;
+    char *payload;
+
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    mrb_get_args(mrb, "*", &argv, &argc);
+
+    iargc = (int)argc;
+    if (iargc == 0) {
+	    payload = NULL;
+    } else {
+	    mrb_get_args(mrb, "s", &payload);
+    }
+    ret = h2get_send_ping(&h2g->ctx, NULL, &err);
+    if (ret < 0) {
+        mrb_value exc;
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
+
 static mrb_value h2get_mruby_send_priority(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
@@ -444,6 +474,49 @@ static mrb_value h2get_mruby_frame_is_end_stream(mrb_state *mrb, mrb_value self)
     return mrb_bool_value(h2g_frame->header.flags & H2GET_HEADERS_HEADERS_FLAG_END_STREAM);
 }
 
+static mrb_value ack_settings(mrb_state *mrb, struct h2get_ctx *ctx)
+{
+    int ret;
+
+    ret = h2get_send_settings_ack(ctx, 1);
+    if (ret < 0) {
+        mrb_value exc;
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, strerror(errno), strlen(strerror(errno)));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
+
+static mrb_value ack_ping(mrb_state *mrb, struct h2get_mruby_frame *h2g_frame)
+{
+	int ret;
+	const char *err;
+        ret = h2get_send_ping(h2g_frame->ctx, h2g_frame->payload.buf, &err);
+        if (ret < 0) {
+                mrb_value exc;
+                exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+                mrb->exc = mrb_obj_ptr(exc);
+        }
+        return mrb_nil_value();
+}
+
+static mrb_value h2get_mruby_frame_ack(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby_frame *h2g_frame;
+
+    h2g_frame = mrb_data_get_ptr(mrb, self, &h2get_mruby_frame_type);
+    switch (h2g_frame->header.type) {
+    case H2GET_HEADERS_PING:
+	return ack_ping(mrb, h2g_frame);
+    case H2GET_HEADERS_SETTINGS:
+	return ack_settings(mrb, h2g_frame->ctx);
+    default:
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "Frame type must be PING or SETTINGS");
+    }
+    return mrb_nil_value();
+}
+
 static mrb_value h2get_mruby_priority_init(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby_priority *h2p;
@@ -502,6 +575,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "send_settings", h2get_mruby_send_settings, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_settings_ack", h2get_mruby_send_settings_ack, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_priority", h2get_mruby_send_priority, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby, "send_ping", h2get_mruby_send_ping, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "send_window_update", h2get_mruby_send_window_update, MRB_ARGS_ARG(2, 0));
 
     mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));
@@ -520,6 +594,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby_frame, "len", h2get_mruby_frame_len, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "stream_id", h2get_mruby_frame_stream_id, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "is_end_stream", h2get_mruby_frame_is_end_stream, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_frame, "ack", h2get_mruby_frame_ack, MRB_ARGS_ARG(0, 0));
 
     /* Priority */
     mrb_define_method(mrb, h2get_mruby_priority, "initialize", h2get_mruby_priority_init, MRB_ARGS_ARG(3, 0));
