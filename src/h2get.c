@@ -437,7 +437,6 @@ int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err)
         *err = "Not connected";
         return -1;
     }
-    dump_zone(&ping_frame, sizeof(ping_frame));
     ret = ctx->ops->write(&ctx->conn, &H2GET_BUF(&ping_frame, sizeof(ping_frame)), 1);
     if (ret < 0) {
         *err = "Write failed";
