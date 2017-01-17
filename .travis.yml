@@ -1,0 +1,15 @@
+dist: trusty
+
+language: c
+
+compiler:
+  - gcc
+
+before_install:
+
+before_script:
+
+script:
+  - cmake .
+  - make
+  - ./h2get firefox.rb www.fastly.com

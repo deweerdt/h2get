@@ -61,4 +61,5 @@ begin
     end
 rescue => e
     p e
+    exit 1
 end
