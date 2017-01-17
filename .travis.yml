@@ -1,4 +1,4 @@
-dist: xenial
+dist: trusty
 
 language: c
 
@@ -6,6 +6,9 @@ compiler:
   - gcc
 
 before_install:
+  - add-apt-repository ppa:ubuntu-toolchain-r/test
+  - apt-get update
+  - apt-get install gcc-4.9 g++-4.9
 
 before_script:
 
