@@ -12,6 +12,17 @@ before_install:
 before_script:
 
 script:
-  - cmake .
+  # OpenSSL 1.0.2
+  - mkdir -p openssl
+  - export OPENSSL_PREFIX="$PWD/openssl"
+  - curl -O https://www.openssl.org/source/openssl-1.0.2j.tar.gz
+  - tar -xf openssl-1.0.2j.tar.gz
+  - cd openssl-1.0.2j
+  - ./config --prefix="$OPENSSL_PREFIX" --openssldir="${OPENSSL_PREFIX}/etc/ssl" --libdir=lib shared zlib-dynamic
+  - make depend
+  - make
+  - make install
+
+  - cmake -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" .
   - make
   - ./h2get firefox.rb www.fastly.com
