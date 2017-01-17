@@ -1,3 +1,5 @@
+# Travis CI Status [![Build Status](https://travis-ci.org/deweerdt/h2get.svg?branch=master)](https://travis-ci.org/deweerdt/h2get)
+
 # Ruby API
 
 ## H2 object
