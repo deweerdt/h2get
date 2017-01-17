@@ -1,14 +1,12 @@
 dist: trusty
+sudo: required
 
 language: c
 
-compiler:
-  - gcc
-
 before_install:
-  - add-apt-repository ppa:ubuntu-toolchain-r/test
-  - apt-get update
-  - apt-get install gcc-4.9 g++-4.9
+  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+  - sudo apt-get update --yes
+  - sudo apt-get install --yes -f gcc-6 g++-6
 
 before_script:
 
