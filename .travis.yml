@@ -22,7 +22,8 @@ script:
   - make depend
   - make
   - make install
-
+  - cd ..
+  # H2GET
   - cmake -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" .
   - make
   - ./h2get firefox.rb www.fastly.com
