@@ -33,8 +33,8 @@ begin
     h2g.send_priority(11, 3, 0, 1)
     prio_low = H2Priority.new(0, 0, 16)
     prio_high = H2Priority.new(0, 0, 32)
-    h2g.getp("/big?1", 15, prio_low)
-    h2g.getp("/big?2", 17, prio_high)
+    h2g.getp("/?1", 15, prio_low)
+    h2g.getp("/?2", 17, prio_high)
     open_streams[15] = 1
     open_streams[17] = 1
     while open_streams.length > 0
