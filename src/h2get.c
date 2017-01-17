@@ -62,7 +62,7 @@ void h2get_ctx_init(struct h2get_ctx *ctx)
     ctx->max_open_sid_server = 0;
 
     if (0) {
-        //TODO: support non-TLS connections
+        // TODO: support non-TLS connections
         h2get_ctx_register_ops(ctx, &plain_ops);
     }
     h2get_ctx_register_ops(ctx, &ssl_ops);
@@ -424,7 +424,7 @@ int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err)
         struct h2get_h2_header header;
         char payload[8];
     } ping_frame = {
-        { 0, H2GET_HEADERS_PING, 0, 0, 0 },
+        {0, H2GET_HEADERS_PING, 0, 0, 0},
     };
 
     ping_frame.header.len = sizetoh2len(sizeof(ping_frame.payload));
@@ -486,7 +486,9 @@ int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2g
     whead = h2get_hpack_add_header(&H2GET_BUFLIT(":path"), &H2GET_BUFSTR((char *)path), whead);
 
     struct h2get_h2_header header_get = {
-        0, H2GET_HEADERS_HEADERS, H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM | H2GET_HEADERS_HEADERS_FLAG_END_HEADERS, 0, 0,
+        0, H2GET_HEADERS_HEADERS, H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM |
+                                      H2GET_HEADERS_HEADERS_FLAG_END_HEADERS,
+        0, 0,
     };
     struct h2get_buf bufs[3];
     header_get.len = sizetoh2len(plen + sizeof(prio));
