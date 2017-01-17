@@ -201,6 +201,52 @@ static mrb_value h2get_mruby_send_prefix(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+
+static mrb_value h2get_mruby_send_rst_stream(mrb_state *mrb, mrb_value self)
+{
+    int ret;
+    struct h2get_mruby *h2g;
+    int timeout;
+    uint32_t stream_id, error_code;
+    const char *err;
+    mrb_value *argv;
+    mrb_int argc, mrb_stream_id, mrb_error_code, mrb_timeout;
+    int iargc;
+
+    mrb_get_args(mrb, "*", &argv, &argc);
+
+    iargc = (int)argc;
+    switch (iargc) {
+    case 3:
+        mrb_get_args(mrb, "iii", &mrb_stream_id, &mrb_error_code, &mrb_timeout);
+        stream_id = (uint32_t)mrb_stream_id;
+        error_code = (uint32_t)mrb_error_code;
+        timeout = (int)mrb_timeout;
+        break;
+    case 2:
+        mrb_get_args(mrb, "ii", &mrb_stream_id, &mrb_error_code);
+        stream_id = (uint32_t)mrb_stream_id;
+        error_code = (uint32_t)mrb_error_code;
+        timeout = -1;
+        break;
+    }
+
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    ret = h2get_send_rst_stream(&h2g->ctx, stream_id, error_code, timeout, &err);
+    if (ret < 0) {
+        mrb_value exc;
+
+        if (err == err_read_timeout) {
+            return mrb_nil_value();
+        }
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
+
 static mrb_value h2get_mruby_send_ping(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
@@ -575,6 +621,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "send_settings_ack", h2get_mruby_send_settings_ack, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_priority", h2get_mruby_send_priority, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_ping", h2get_mruby_send_ping, MRB_ARGS_ARG(0, 1));
+    mrb_define_method(mrb, h2get_mruby, "send_rst_stream", h2get_mruby_send_rst_stream, MRB_ARGS_ARG(2, 1));
     mrb_define_method(mrb, h2get_mruby, "send_window_update", h2get_mruby_send_window_update, MRB_ARGS_ARG(2, 0));
 
     mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));

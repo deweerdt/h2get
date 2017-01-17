@@ -417,6 +417,33 @@ int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_
     return 0;
 }
 
+int h2get_send_rst_stream(struct h2get_ctx *ctx, uint32_t stream_id, uint32_t error_code, int timeout, const char **err)
+{
+    int ret;
+    struct {
+        struct h2get_h2_header header;
+        uint32_t error_code;
+    } __attribute__((packed)) rst_stream =  {
+        {0, H2GET_HEADERS_RST_STREAM, 0, 0, 0},
+    };
+
+    rst_stream.header.stream_id = htonl(stream_id) >> 1;
+    rst_stream.header.len = sizetoh2len(rst_stream.error_code);
+    rst_stream.error_code = htonl(error_code);
+
+    if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
+        *err = "Not connected";
+        return -1;
+    }
+    ret = ctx->ops->write(&ctx->conn, &H2GET_BUF(&rst_stream, sizeof(rst_stream)), 1);
+    if (ret < 0) {
+        *err = "Write failed";
+        return -1;
+    }
+
+    return 0;
+}
+
 int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err)
 {
     int ret;
@@ -561,6 +588,9 @@ static void usage(void)
 int main(int argc, char **argv)
 {
     int extra_args;
+
+    signal(SIGPIPE, SIG_IGN);
+
     if (argc < 1) {
         usage();
     }
