@@ -371,10 +371,10 @@ static mrb_value h2get_mruby_getp2(mrb_state *mrb, mrb_value self)
     ret = mrb_get_args(mrb, "zio", &path, &mrb_stream_id, &mrb_prio);
 
     struct h2get_buf headers[] = {
-        { H2GET_STRLIT(":path") } , { H2GET_STRLIT("/") },
         { H2GET_STRLIT(":method") }, { H2GET_STRLIT("GET") },
         { H2GET_STRLIT(":scheme") }, { H2GET_STRLIT("https") },
         { H2GET_STRLIT(":authority") }, { h2g->ctx.url.raw.host.buf, h2g->ctx.url.raw.host.len },
+        { H2GET_STRLIT(":path") } , { path, strlen(path) },
     };
 
     h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);

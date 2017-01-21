@@ -520,17 +520,18 @@ int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t n
         0, 0,
     };
     struct h2get_buf bufs[3];
-    header_get.len = sizetoh2len(plen + sizeof(prio));
+    header_get.len = sizetoh2len(plen + sizeof(*prio));
     header_get.stream_id = htonl(sid) >> 1;
     ctx->max_open_sid_client = (sid + 2);
     bufs[0] = H2GET_BUF(&header_get, sizeof(header_get));
-    bufs[1] = H2GET_BUF(&prio, sizeof(prio));
+    bufs[1] = H2GET_BUF(prio, sizeof(*prio));
     bufs[2] = H2GET_BUF(payload, plen);
 
     if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
         *err = "Not connected";
         return -1;
     }
+
     ret = ctx->ops->write(&ctx->conn, bufs, 3);
     if (ret < 0) {
         *err = "Write failed\n";
