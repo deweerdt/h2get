@@ -9,6 +9,7 @@
 
 #include "mruby.h"
 #include "mruby/array.h"
+#include "mruby/hash.h"
 #include "mruby/class.h"
 #include "mruby/compile.h"
 #include "mruby/data.h"
@@ -354,31 +355,40 @@ static mrb_value h2get_mruby_getp(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_getp2(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_send_header(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
     struct h2get_mruby_priority *h2p;
     const char *err;
     int ret;
     mrb_int mrb_stream_id;
-    mrb_value mrb_prio;
-    mrb_value exc;
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    mrb_value headers, header_keys, mrb_prio, exc;
 
     H2GET_MRUBY_ASSERT_ARGS(3);
 
-    char *path = NULL;
-    ret = mrb_get_args(mrb, "zio", &path, &mrb_stream_id, &mrb_prio);
+    ret = mrb_get_args(mrb, "Hio", &headers, &mrb_stream_id, &mrb_prio);
 
-    struct h2get_buf headers[] = {
-        { H2GET_STRLIT(":method") }, { H2GET_STRLIT("GET") },
-        { H2GET_STRLIT(":scheme") }, { H2GET_STRLIT("https") },
-        { H2GET_STRLIT(":authority") }, { h2g->ctx.url.raw.host.buf, h2g->ctx.url.raw.host.len },
-        { H2GET_STRLIT(":path") } , { path, strlen(path) },
-    };
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    header_keys = mrb_hash_keys(mrb, headers);
+    mrb_int headers_len = mrb_ary_len(mrb, header_keys);
+
+    struct h2get_buf h2_headers[headers_len*2];
+   for (int i = 0; i < headers_len; i++) {
+       mrb_value k = mrb_ary_entry(header_keys, i);
+       mrb_value v = mrb_hash_get(mrb, headers, k);
+       if (!mrb_string_p(k) || !mrb_string_p(v)) {
+           err = "Headers keys and values must be strings";
+           exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+           mrb->exc = mrb_obj_ptr(exc);
+           return mrb_nil_value();
+       }
+      h2_headers[i*2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
+      h2_headers[i*2+1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
+    }
 
     h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
-    ret = h2get_send_header(&h2g->ctx, headers, ARRAY_SIZE(headers) / 2, (uint32_t)mrb_stream_id, &h2p->prio, &err);
+    ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, &h2p->prio, &err);
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
         mrb->exc = mrb_obj_ptr(exc);
@@ -659,7 +669,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
 
     mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "getp", h2get_mruby_getp, MRB_ARGS_ARG(3, 0));
-    mrb_define_method(mrb, h2get_mruby, "getp2", h2get_mruby_getp2, MRB_ARGS_ARG(3, 0));
+    mrb_define_method(mrb, h2get_mruby, "send_header", h2get_mruby_send_header, MRB_ARGS_ARG(3, 0));
 
     mrb_define_method(mrb, h2get_mruby, "on_settings", h2get_mruby_on_settings, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "on_settings_ack", h2get_mruby_on_settings_ack, MRB_ARGS_ARG(1, 0));

@@ -33,8 +33,15 @@ begin
     h2g.send_priority(11, 3, 0, 1)
     prio_low = H2Priority.new(0, 0, 16)
     prio_high = H2Priority.new(0, 0, 32)
-    h2g.getp2("/?1", 15, prio_low)
-    h2g.getp2("/?2", 17, prio_high)
+    req = {
+        ":method" => "GET",
+        ":authority" => host,
+        ":scheme" => "https",
+    }
+    req1 = req.merge(":path" => "/?1")
+    req2 = req.merge(":path" => "/?2")
+    h2g.getp2(req1, 15, prio_low)
+    h2g.getp2(req2, 17, prio_low)
     open_streams[15] = 1
     open_streams[17] = 1
     while open_streams.length > 0
