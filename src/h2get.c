@@ -493,6 +493,54 @@ int h2get_send_settings(struct h2get_ctx *ctx, const char **err)
     return 0;
 }
 
+int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, struct h2get_h2_priority *prio, const char **err)
+{
+    int ret;
+    size_t plen = 0;
+    char *whead, *payload;
+    struct h2get_buf *hp;
+    int i;
+
+    for (i = 0, hp = headers; i < nr_headers; i++, hp += 2) {
+        struct h2get_buf *hname = hp, *hvalue = hp + 1;
+        plen += 3 + hname->len + hvalue->len;
+    }
+
+    payload = alloca(plen);
+    whead = payload;
+
+    for (i = 0, hp = headers; i < nr_headers; i++, hp += 2) {
+        struct h2get_buf *hname = hp, *hvalue = hp + 1;
+        whead = h2get_hpack_add_header(hname, hvalue, whead);
+    }
+
+    struct h2get_h2_header header_get = {
+        0, H2GET_HEADERS_HEADERS, H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM |
+                                      H2GET_HEADERS_HEADERS_FLAG_END_HEADERS,
+        0, 0,
+    };
+    struct h2get_buf bufs[3];
+    header_get.len = sizetoh2len(plen + sizeof(*prio));
+    header_get.stream_id = htonl(sid) >> 1;
+    ctx->max_open_sid_client = (sid + 2);
+    bufs[0] = H2GET_BUF(&header_get, sizeof(header_get));
+    bufs[1] = H2GET_BUF(prio, sizeof(*prio));
+    bufs[2] = H2GET_BUF(payload, plen);
+
+    if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
+        *err = "Not connected";
+        return -1;
+    }
+
+    ret = ctx->ops->write(&ctx->conn, bufs, 3);
+    if (ret < 0) {
+        *err = "Write failed\n";
+        return -1;
+    }
+
+    return 0;
+}
+
 int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2get_h2_priority prio, const char **err)
 {
     int ret;

@@ -298,6 +298,7 @@ int h2get_send_windows_update(struct h2get_ctx *ctx, uint32_t stream_id, uint32_
 int h2get_send_rst_stream(struct h2get_ctx *ctx, uint32_t stream_id, uint32_t error_code, int timeout, const char **err);
 int h2get_get(struct h2get_ctx *ctx, const char *path, const char **err);
 int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2get_h2_priority prio, const char **err);
+int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, struct h2get_h2_priority *prio, const char **err);
 const char *h2get_render_error_code(uint32_t err);
 
 int h2get_send_settings_ack(struct h2get_ctx *ctx, int timeout);
