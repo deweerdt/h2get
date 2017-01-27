@@ -126,7 +126,7 @@ static int ssl_write(struct h2get_conn *conn, struct h2get_buf *bufs, size_t nr_
         int wlen = 0;
         do {
             ret = SSL_write(conn->priv, bufs[i].buf + wlen, bufs[i].len - wlen);
-            if (ret <= 0) {
+            if (ret < 0) {
                 return -1;
             }
             wlen -= ret;

@@ -493,7 +493,7 @@ int h2get_send_settings(struct h2get_ctx *ctx, const char **err)
     return 0;
 }
 
-int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, struct h2get_h2_priority *prio, const char **err)
+int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags, struct h2get_h2_priority *prio, int is_cont, const char **err)
 {
     int ret;
     size_t plen = 0;
@@ -515,24 +515,26 @@ int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t n
     }
 
     struct h2get_h2_header header_get = {
-        0, H2GET_HEADERS_HEADERS, H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM |
-                                      H2GET_HEADERS_HEADERS_FLAG_END_HEADERS,
+        0, is_cont ? H2GET_HEADERS_CONTINUATION : H2GET_HEADERS_HEADERS, flags,
         0, 0,
     };
     struct h2get_buf bufs[3];
-    header_get.len = sizetoh2len(plen + sizeof(*prio));
+    header_get.len = sizetoh2len(plen + (prio ? sizeof(*prio) : 0));
     header_get.stream_id = htonl(sid) >> 1;
     ctx->max_open_sid_client = (sid + 2);
-    bufs[0] = H2GET_BUF(&header_get, sizeof(header_get));
-    bufs[1] = H2GET_BUF(prio, sizeof(*prio));
-    bufs[2] = H2GET_BUF(payload, plen);
+    i = 0;
+    bufs[i++] = H2GET_BUF(&header_get, sizeof(header_get));
+    if (prio) {
+        bufs[i++] = H2GET_BUF(prio, sizeof(*prio));
+    }
+    bufs[i++] = H2GET_BUF(payload, plen);
 
     if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
         *err = "Not connected";
         return -1;
     }
 
-    ret = ctx->ops->write(&ctx->conn, bufs, 3);
+    ret = ctx->ops->write(&ctx->conn, bufs, i);
     if (ret < 0) {
         *err = "Write failed\n";
         return -1;
