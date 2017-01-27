@@ -40,8 +40,8 @@ begin
     }
     req1 = req.merge(":path" => "/?1")
     req2 = req.merge(":path" => "/?2")
-    h2g.getp2(req1, 15, prio_low)
-    h2g.getp2(req2, 17, prio_low)
+    h2g.send_header(req1, 15, prio_low)
+    h2g.send_header(req2, 17, prio_low)
     open_streams[15] = 1
     open_streams[17] = 1
     while open_streams.length > 0
