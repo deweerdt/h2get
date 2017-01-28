@@ -9,11 +9,11 @@
 
 #include "mruby.h"
 #include "mruby/array.h"
-#include "mruby/hash.h"
 #include "mruby/class.h"
 #include "mruby/compile.h"
 #include "mruby/data.h"
 #include "mruby/error.h"
+#include "mruby/hash.h"
 #include "mruby/string.h"
 
 struct h2get_mruby {
@@ -202,7 +202,6 @@ static mrb_value h2get_mruby_send_prefix(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-
 static mrb_value h2get_mruby_send_rst_stream(mrb_state *mrb, mrb_value self)
 {
     int ret;
@@ -375,13 +374,12 @@ static mrb_value h2get_mruby_send_header(mrb_state *mrb, mrb_value self)
     if (ret > 3)
         has_prio = 1;
 
-
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
     header_keys = mrb_hash_keys(mrb, headers);
     mrb_int headers_len = mrb_ary_len(mrb, header_keys);
 
-    struct h2get_buf h2_headers[headers_len*2];
+    struct h2get_buf h2_headers[headers_len * 2];
     for (int i = 0; i < headers_len; i++) {
         mrb_value k = mrb_ary_entry(header_keys, i);
         mrb_value v = mrb_hash_get(mrb, headers, k);
@@ -391,18 +389,21 @@ static mrb_value h2get_mruby_send_header(mrb_state *mrb, mrb_value self)
             mrb->exc = mrb_obj_ptr(exc);
             return mrb_nil_value();
         }
-        h2_headers[i*2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
-        h2_headers[i*2+1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
+        h2_headers[i * 2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
+        h2_headers[i * 2 + 1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
     }
 
     if (!has_flags) {
-        mrb_flags = H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM | H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
+        mrb_flags = H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM |
+                    H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
     }
     if (has_prio) {
         h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
-        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, &h2p->prio, 0, &err);
+        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, &h2p->prio,
+                                0, &err);
     } else {
-        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0, &err);
+        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0,
+                                &err);
     }
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -429,13 +430,12 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
     if (ret > 2)
         has_flags = 1;
 
-
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
     header_keys = mrb_hash_keys(mrb, headers);
     mrb_int headers_len = mrb_ary_len(mrb, header_keys);
 
-    struct h2get_buf h2_headers[headers_len*2];
+    struct h2get_buf h2_headers[headers_len * 2];
     for (int i = 0; i < headers_len; i++) {
         mrb_value k = mrb_ary_entry(header_keys, i);
         mrb_value v = mrb_hash_get(mrb, headers, k);
@@ -445,8 +445,8 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
             mrb->exc = mrb_obj_ptr(exc);
             return mrb_nil_value();
         }
-        h2_headers[i*2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
-        h2_headers[i*2+1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
+        h2_headers[i * 2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
+        h2_headers[i * 2 + 1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
     }
 
     if (!has_flags) {

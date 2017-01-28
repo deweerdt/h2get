@@ -423,7 +423,7 @@ int h2get_send_rst_stream(struct h2get_ctx *ctx, uint32_t stream_id, uint32_t er
     struct {
         struct h2get_h2_header header;
         uint32_t error_code;
-    } __attribute__((packed)) rst_stream =  {
+    } __attribute__((packed)) rst_stream = {
         {0, H2GET_HEADERS_RST_STREAM, 0, 0, 0},
     };
 
@@ -493,7 +493,8 @@ int h2get_send_settings(struct h2get_ctx *ctx, const char **err)
     return 0;
 }
 
-int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags, struct h2get_h2_priority *prio, int is_cont, const char **err)
+int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags,
+                      struct h2get_h2_priority *prio, int is_cont, const char **err)
 {
     int ret;
     size_t plen = 0;
@@ -515,8 +516,7 @@ int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t n
     }
 
     struct h2get_h2_header header_get = {
-        0, is_cont ? H2GET_HEADERS_CONTINUATION : H2GET_HEADERS_HEADERS, flags,
-        0, 0,
+        0, is_cont ? H2GET_HEADERS_CONTINUATION : H2GET_HEADERS_HEADERS, flags, 0, 0,
     };
     struct h2get_buf bufs[3];
     header_get.len = sizetoh2len(plen + (prio ? sizeof(*prio) : 0));
