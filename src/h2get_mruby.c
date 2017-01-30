@@ -9,11 +9,11 @@
 
 #include "mruby.h"
 #include "mruby/array.h"
-#include "mruby/hash.h"
 #include "mruby/class.h"
 #include "mruby/compile.h"
 #include "mruby/data.h"
 #include "mruby/error.h"
+#include "mruby/hash.h"
 #include "mruby/string.h"
 
 struct h2get_mruby {
@@ -202,7 +202,6 @@ static mrb_value h2get_mruby_send_prefix(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-
 static mrb_value h2get_mruby_send_rst_stream(mrb_state *mrb, mrb_value self)
 {
     int ret;
@@ -360,35 +359,100 @@ static mrb_value h2get_mruby_send_header(mrb_state *mrb, mrb_value self)
     struct h2get_mruby *h2g;
     struct h2get_mruby_priority *h2p;
     const char *err;
-    int ret;
-    mrb_int mrb_stream_id;
+    int ret, has_prio = 0, has_flags = 0;
+    mrb_int mrb_stream_id, mrb_flags;
     mrb_value headers, header_keys, mrb_prio, exc;
 
-    H2GET_MRUBY_ASSERT_ARGS(3);
+    ret = mrb_get_args(mrb, "Hi|io", &headers, &mrb_stream_id, &mrb_flags, &mrb_prio);
+    if (ret < 2) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "wrong number of arguments");
+        return mrb_nil_value();
+    }
 
-    ret = mrb_get_args(mrb, "Hio", &headers, &mrb_stream_id, &mrb_prio);
+    if (ret > 2)
+        has_flags = 1;
+    if (ret > 3)
+        has_prio = 1;
 
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
     header_keys = mrb_hash_keys(mrb, headers);
     mrb_int headers_len = mrb_ary_len(mrb, header_keys);
 
-    struct h2get_buf h2_headers[headers_len*2];
-   for (int i = 0; i < headers_len; i++) {
-       mrb_value k = mrb_ary_entry(header_keys, i);
-       mrb_value v = mrb_hash_get(mrb, headers, k);
-       if (!mrb_string_p(k) || !mrb_string_p(v)) {
-           err = "Headers keys and values must be strings";
-           exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
-           mrb->exc = mrb_obj_ptr(exc);
-           return mrb_nil_value();
-       }
-      h2_headers[i*2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
-      h2_headers[i*2+1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
+    struct h2get_buf h2_headers[headers_len * 2];
+    for (int i = 0; i < headers_len; i++) {
+        mrb_value k = mrb_ary_entry(header_keys, i);
+        mrb_value v = mrb_hash_get(mrb, headers, k);
+        if (!mrb_string_p(k) || !mrb_string_p(v)) {
+            err = "Headers keys and values must be strings";
+            exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+            mrb->exc = mrb_obj_ptr(exc);
+            return mrb_nil_value();
+        }
+        h2_headers[i * 2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
+        h2_headers[i * 2 + 1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
     }
 
-    h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
-    ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, &h2p->prio, &err);
+    if (!has_flags) {
+        mrb_flags = H2GET_HEADERS_HEADERS_FLAG_END_STREAM |
+                    H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
+    }
+    if (has_prio) {
+        h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
+        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, &h2p->prio,
+                                0, &err);
+    } else {
+        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0,
+                                &err);
+    }
+    if (ret < 0) {
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
+
+static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    const char *err;
+    int ret, has_flags = 0;
+    mrb_int mrb_stream_id, mrb_flags;
+    mrb_value headers, header_keys, exc;
+
+    ret = mrb_get_args(mrb, "Hi|i", &headers, &mrb_stream_id, &mrb_flags);
+    if (ret < 2) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "wrong number of arguments");
+        return mrb_nil_value();
+    }
+
+    if (ret > 2)
+        has_flags = 1;
+
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    header_keys = mrb_hash_keys(mrb, headers);
+    mrb_int headers_len = mrb_ary_len(mrb, header_keys);
+
+    struct h2get_buf h2_headers[headers_len * 2];
+    for (int i = 0; i < headers_len; i++) {
+        mrb_value k = mrb_ary_entry(header_keys, i);
+        mrb_value v = mrb_hash_get(mrb, headers, k);
+        if (!mrb_string_p(k) || !mrb_string_p(v)) {
+            err = "Headers keys and values must be strings";
+            exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+            mrb->exc = mrb_obj_ptr(exc);
+            return mrb_nil_value();
+        }
+        h2_headers[i * 2] = H2GET_BUF(RSTRING_PTR(k), RSTRING_LEN(k));
+        h2_headers[i * 2 + 1] = H2GET_BUF(RSTRING_PTR(v), RSTRING_LEN(v));
+    }
+
+    if (!has_flags) {
+        mrb_flags = H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
+    }
+    ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 1, &err);
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
         mrb->exc = mrb_obj_ptr(exc);
@@ -669,12 +733,20 @@ void run_mruby(const char *rbfile, int argc, char **argv)
 
     mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "getp", h2get_mruby_getp, MRB_ARGS_ARG(3, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_header", h2get_mruby_send_header, MRB_ARGS_ARG(3, 0));
+    mrb_define_method(mrb, h2get_mruby, "send_header", h2get_mruby_send_header, MRB_ARGS_ARG(2, 3));
+    mrb_define_method(mrb, h2get_mruby, "send_continuation", h2get_mruby_send_continuation, MRB_ARGS_ARG(2, 1));
 
     mrb_define_method(mrb, h2get_mruby, "on_settings", h2get_mruby_on_settings, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "on_settings_ack", h2get_mruby_on_settings_ack, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "read", h2get_mruby_read, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "close", h2get_mruby_close, MRB_ARGS_ARG(1, 0));
+
+    mrb_define_global_const(mrb, "ACK", mrb_fixnum_value(0x1));
+    mrb_define_global_const(mrb, "END_STREAM", mrb_fixnum_value(0x1));
+    mrb_define_global_const(mrb, "END_HEADERS", mrb_fixnum_value(0x4));
+    mrb_define_global_const(mrb, "PADDED", mrb_fixnum_value(0x8));
+    mrb_define_global_const(mrb, "PRIORITY", mrb_fixnum_value(0x20));
+
 
     /* Frame */
     mrb_define_method(mrb, h2get_mruby_frame, "type", h2get_mruby_frame_type_str, MRB_ARGS_ARG(0, 0));
