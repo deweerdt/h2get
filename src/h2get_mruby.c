@@ -394,7 +394,7 @@ static mrb_value h2get_mruby_send_header(mrb_state *mrb, mrb_value self)
     }
 
     if (!has_flags) {
-        mrb_flags = H2GET_HEADERS_HEADERS_FLAG_PRIORITY | H2GET_HEADERS_HEADERS_FLAG_END_STREAM |
+        mrb_flags = H2GET_HEADERS_HEADERS_FLAG_END_STREAM |
                     H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
     }
     if (has_prio) {
@@ -740,6 +740,13 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "on_settings_ack", h2get_mruby_on_settings_ack, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "read", h2get_mruby_read, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "close", h2get_mruby_close, MRB_ARGS_ARG(1, 0));
+
+    mrb_define_global_const(mrb, "ACK", mrb_fixnum_value(0x1));
+    mrb_define_global_const(mrb, "END_STREAM", mrb_fixnum_value(0x1));
+    mrb_define_global_const(mrb, "END_HEADERS", mrb_fixnum_value(0x4));
+    mrb_define_global_const(mrb, "PADDED", mrb_fixnum_value(0x8));
+    mrb_define_global_const(mrb, "PRIORITY", mrb_fixnum_value(0x20));
+
 
     /* Frame */
     mrb_define_method(mrb, h2get_mruby_frame, "type", h2get_mruby_frame_type_str, MRB_ARGS_ARG(0, 0));
