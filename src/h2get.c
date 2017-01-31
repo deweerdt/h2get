@@ -244,10 +244,20 @@ no_scheme:
 
 int h2get_close(struct h2get_ctx *ctx)
 {
+    free(ctx->url.unparsed.buf);
+    h2get_hpack_ctx_empty(&ctx->own_hpack);
     if (ctx->ops) {
-        return ctx->ops->close(&ctx->conn, ctx->xprt_priv);
+        return ctx->ops->close(&ctx->conn, ctx->conn.priv);
     }
     return 0;
+}
+
+void h2get_destroy(struct h2get_ctx *ctx)
+{
+    if (ctx->ops->fini) {
+        ctx->ops->fini(ctx->xprt_priv);
+    }
+    free(ctx->registered_ops);
 }
 
 int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **err)

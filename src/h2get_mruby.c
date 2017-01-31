@@ -26,7 +26,7 @@ struct h2get_mruby_priority {
 
 struct h2get_mruby_frame {
     struct h2get_ctx *ctx;
-    struct h2get_buf payload;
+    mrb_value payload;
     struct h2get_h2_header header;
 };
 
@@ -100,6 +100,16 @@ static mrb_value h2get_mruby_connect(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2get_mruby_destroy(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    h2get_destroy(&h2g->ctx);
+
+    return mrb_nil_value();
+}
+
 static mrb_value h2get_mruby_close(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
@@ -121,7 +131,7 @@ static mrb_value create_frame(mrb_state *mrb, struct h2get_ctx *ctx, struct h2ge
     h2g_frame = (struct h2get_mruby_frame *)mrb_malloc(mrb, sizeof(*h2g_frame));
     h2g_frame->ctx = ctx;
     h2g_frame->header = *header;
-    h2g_frame->payload = *payload;
+    h2g_frame->payload = mrb_str_new(mrb, payload->buf, payload->len);
 
     mrb_data_init(frame, h2g_frame, &h2get_mruby_frame_type);
 
@@ -137,6 +147,7 @@ static mrb_value h2get_mruby_read(mrb_state *mrb, mrb_value self)
     int timeout;
     const char *err;
     mrb_value *argv;
+    mrb_value frame;
     mrb_int argc;
     int iargc;
 
@@ -163,7 +174,11 @@ static mrb_value h2get_mruby_read(mrb_state *mrb, mrb_value self)
 
         return mrb_nil_value();
     }
-    return create_frame(mrb, &h2g->ctx, &header, &payload);
+    frame = create_frame(mrb, &h2g->ctx, &header, &payload);
+
+    free(payload.buf);
+
+    return frame;
 }
 
 static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
@@ -511,7 +526,8 @@ static mrb_value h2get_mruby_on_settings(mrb_state *mrb, mrb_value self)
     mrb_get_args(mrb, "o", &frame_mrbv);
     h2g = (struct h2get_mruby *)DATA_PTR(self);
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(frame_mrbv);
-    ret = h2get_ctx_on_peer_settings(&h2g->ctx, &h2g_frame->header, h2g_frame->payload.buf, h2g_frame->payload.len);
+    ret = h2get_ctx_on_peer_settings(&h2g->ctx, &h2g_frame->header, RSTRING_PTR(h2g_frame->payload),
+                                     RSTRING_LEN(h2g_frame->payload));
     if (ret < 0) {
         const char *err;
         mrb_value exc;
@@ -521,8 +537,6 @@ static mrb_value h2get_mruby_on_settings(mrb_state *mrb, mrb_value self)
     }
     return mrb_nil_value();
 }
-
-static mrb_value h2get_mruby_on_settings_ack(mrb_state *mrb, mrb_value self) { return mrb_nil_value(); }
 
 static mrb_value h2get_mruby_kernel_sleep(mrb_state *mrb, mrb_value self)
 {
@@ -579,16 +593,19 @@ static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
     char *buf = NULL;
     int ret;
     struct h2get_buf out;
+    mrb_value str;
 
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
-    ret = asprintf(&buf, "%s frame <length=%zu, flags=0x%02x, stream_id=%" PRIu32 ">",
-                   h2get_frame_type_to_str(h2g_frame->header.type), h2g_frame->payload.len, h2g_frame->header.flags,
-                   ntohl(h2g_frame->header.stream_id << 1));
+    ret = asprintf(&buf, "%s frame <length=%d, flags=0x%02x, stream_id=%" PRIu32 ">",
+                   h2get_frame_type_to_str(h2g_frame->header.type), RSTRING_LEN(h2g_frame->payload),
+                   h2g_frame->header.flags, ntohl(h2g_frame->header.stream_id << 1));
     out = H2GET_BUF(buf, ret);
-    h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame->ctx, &out, &h2g_frame->header, h2g_frame->payload.buf,
-                                                     h2g_frame->payload.len);
+    h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame->ctx, &out, &h2g_frame->header,
+                                                     RSTRING_PTR(h2g_frame->payload), RSTRING_LEN(h2g_frame->payload));
 
-    return mrb_str_new(mrb, out.buf, out.len);
+    str = mrb_str_new(mrb, out.buf, out.len);
+    free(out.buf);
+    return str;
 }
 
 static mrb_value h2get_mruby_frame_flags(mrb_state *mrb, mrb_value self)
@@ -644,7 +661,7 @@ static mrb_value ack_ping(mrb_state *mrb, struct h2get_mruby_frame *h2g_frame)
 {
     int ret;
     const char *err;
-    ret = h2get_send_ping(h2g_frame->ctx, h2g_frame->payload.buf, &err);
+    ret = h2get_send_ping(h2g_frame->ctx, RSTRING_PTR(h2g_frame->payload), &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -736,9 +753,9 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "send_continuation", h2get_mruby_send_continuation, MRB_ARGS_ARG(2, 1));
 
     mrb_define_method(mrb, h2get_mruby, "on_settings", h2get_mruby_on_settings, MRB_ARGS_ARG(1, 0));
-    mrb_define_method(mrb, h2get_mruby, "on_settings_ack", h2get_mruby_on_settings_ack, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "read", h2get_mruby_read, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "close", h2get_mruby_close, MRB_ARGS_ARG(1, 0));
+    mrb_define_method(mrb, h2get_mruby, "destroy", h2get_mruby_destroy, MRB_ARGS_ARG(1, 0));
 
     mrb_define_global_const(mrb, "ACK", mrb_fixnum_value(0x1));
     mrb_define_global_const(mrb, "END_STREAM", mrb_fixnum_value(0x1));

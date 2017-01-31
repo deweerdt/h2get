@@ -163,6 +163,8 @@ static int ssl_close(struct h2get_conn *conn, void *priv)
         return -1;
     }
     conn->state = H2GET_CONN_STATE_INIT;
+    SSL_shutdown(priv);
+    SSL_free(priv);
     return close(conn->fd);
 }
 

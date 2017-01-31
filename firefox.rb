@@ -67,6 +67,8 @@ begin
             end
         end
     end
+    h2g.close()
+    h2g.destroy()
 rescue => e
     p e
     exit 1

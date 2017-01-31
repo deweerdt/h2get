@@ -290,6 +290,7 @@ struct h2get_h2_settings;
 int h2get_ctx_on_peer_settings(struct h2get_ctx *ctx, struct h2get_h2_header *h, char *payload, int plen);
 int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **err);
 int h2get_close(struct h2get_ctx *ctx);
+void h2get_destroy(struct h2get_ctx *ctx);
 int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_h2_priority *prio, const char **err);
 int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err);
 int h2get_send_settings(struct h2get_ctx *ctx, const char **err);
@@ -379,6 +380,14 @@ struct h2get_command {
 
 void run_mruby(const char *rbfile, int argc, char **argv);
 
+/* mem_pool.c */
+
+struct h2g_mem_pool;
+void *h2g_pool_malloc(struct h2g_mem_pool *pool, size_t size);
+void h2g_pool_free(struct h2g_mem_pool *pool);
+void h2g_pool_free_one(struct h2g_mem_pool *pool, void *ptr);
+void *h2g_pool_calloc(struct h2g_mem_pool *pool, size_t nmemb, size_t size);
+void *h2g_pool_realloc(struct h2g_mem_pool *pool, void *ptr, size_t size);
 
 #endif /* H2GET_H_ */
 /* vim: set expandtab ts=4 sw=4: */
