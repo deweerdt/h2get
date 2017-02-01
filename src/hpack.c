@@ -509,7 +509,6 @@ static void insert_dyn_header(struct h2get_hpack_ctx *hhc, struct h2get_decoded_
     struct h2get_decoded_header *newh;
     size_t hsize;
 
-    newh = decoded_header_dup(h);
     hsize = rfc7541_header_size(h);
 
     while (!list_empty(&hhc->dyn_table) && hhc->dyn_size + hsize > hhc->max_dyn_size) {
@@ -520,8 +519,11 @@ static void insert_dyn_header(struct h2get_hpack_ctx *hhc, struct h2get_decoded_
     if (hhc->dyn_size + hsize > hhc->max_dyn_size) {
         return;
     }
+
+    newh = decoded_header_dup(h);
     list_add(&hhc->dyn_table, &newh->node);
     hhc->dyn_size += hsize;
+
     return;
 }
 
