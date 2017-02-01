@@ -198,9 +198,17 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
     if (settings_array_len) {
         settings = alloca(sizeof(*settings) * settings_array_len);
         for (int i = 0; i < settings_array_len; i++) {
-            mrb_value one_setting = mrb_ary_entry(*settings_array, i);
-            settings[i].id = mrb_fixnum(mrb_ary_entry(one_setting, 0));
-            settings[i].value = mrb_fixnum(mrb_ary_entry(one_setting, 1));
+            mrb_value one_setting = settings_array[i];
+            mrb_check_array_type(mrb, one_setting);
+            if (RARRAY_LEN(one_setting) != 2) {
+                mrb_value exc;
+                const char *err = "Expecting an array of array pairs: [[1,2],[3,4]]";
+                exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+                mrb->exc = mrb_obj_ptr(exc);
+                return mrb_nil_value();
+            }
+            settings[i].id = mrb_fixnum(RARRAY_PTR(one_setting)[0]);
+            settings[i].value = mrb_fixnum(RARRAY_PTR(one_setting)[1]);
         }
     }
     ret = h2get_send_settings(&h2g->ctx, settings, nr_settings, &err);
