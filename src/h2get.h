@@ -380,14 +380,5 @@ struct h2get_command {
 
 void run_mruby(const char *rbfile, int argc, char **argv);
 
-/* mem_pool.c */
-
-struct h2g_mem_pool;
-void *h2g_pool_malloc(struct h2g_mem_pool *pool, size_t size);
-void h2g_pool_free(struct h2g_mem_pool *pool);
-void h2g_pool_free_one(struct h2g_mem_pool *pool, void *ptr);
-void *h2g_pool_calloc(struct h2g_mem_pool *pool, size_t nmemb, size_t size);
-void *h2g_pool_realloc(struct h2g_mem_pool *pool, void *ptr, size_t size);
-
 #endif /* H2GET_H_ */
 /* vim: set expandtab ts=4 sw=4: */
