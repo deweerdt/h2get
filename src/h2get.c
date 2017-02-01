@@ -483,11 +483,11 @@ int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err)
     return 0;
 }
 
-int h2get_send_settings(struct h2get_ctx *ctx, const char **err)
+int h2get_send_settings(struct h2get_ctx *ctx, struct h2get_h2_setting *settings, int nr_settings, const char **err)
 {
     int ret;
-    static struct h2get_h2_header default_settings_frame = {
-        0, H2GET_HEADERS_SETTINGS, 0, 0, 0,
+    struct h2get_h2_header default_settings_frame = {
+        sizetoh2len(nr_settings * sizeof(*settings)), H2GET_HEADERS_SETTINGS, 0, 0, 0,
     };
 
     if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {

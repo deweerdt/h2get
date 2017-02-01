@@ -7,7 +7,7 @@ begin
     puts "#######################"
     h2g.connect(host)
     h2g.send_prefix()
-    h2g.send_settings()
+    h2g.send_settings([[2,0]])
     open_streams = {}
     # Ack settings
     while true do

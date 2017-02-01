@@ -186,10 +186,24 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
     struct h2get_mruby *h2g;
     const char *err;
     int ret;
+    struct h2get_h2_setting *settings = NULL;
+    int nr_settings = 0;
+    mrb_value *settings_array = NULL;
+    mrb_int settings_array_len = 0;
 
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
-    ret = h2get_send_settings(&h2g->ctx, &err);
+    ret = mrb_get_args(mrb, "|a!", &settings_array, &settings_array_len);
+
+    if (settings_array_len) {
+        settings = alloca(sizeof(*settings) * settings_array_len);
+        for (int i = 0; i < settings_array_len; i++) {
+            mrb_value one_setting = mrb_ary_entry(*settings_array, i);
+            settings[i].id = mrb_fixnum(mrb_ary_entry(one_setting, 0));
+            settings[i].value = mrb_fixnum(mrb_ary_entry(one_setting, 1));
+        }
+    }
+    ret = h2get_send_settings(&h2g->ctx, settings, nr_settings, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -740,7 +754,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "connect", h2get_mruby_connect, MRB_ARGS_ARG(1, 0));
 
     mrb_define_method(mrb, h2get_mruby, "send_prefix", h2get_mruby_send_prefix, MRB_ARGS_ARG(0, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_settings", h2get_mruby_send_settings, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby, "send_settings", h2get_mruby_send_settings, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "send_settings_ack", h2get_mruby_send_settings_ack, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_priority", h2get_mruby_send_priority, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_ping", h2get_mruby_send_ping, MRB_ARGS_ARG(0, 1));
