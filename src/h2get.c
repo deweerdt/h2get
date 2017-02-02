@@ -503,8 +503,36 @@ int h2get_send_settings(struct h2get_ctx *ctx, struct h2get_h2_setting *settings
     return 0;
 }
 
-int h2get_send_header(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags,
-                      struct h2get_h2_priority *prio, int is_cont, const char **err)
+int h2get_send_data(struct h2get_ctx *ctx, struct h2get_buf data, uint32_t sid, int flags,
+                    const char **err)
+{
+    int ret, i = 0;
+    struct h2get_buf bufs[2];
+    struct h2get_h2_header data_header = {
+        0, H2GET_HEADERS_DATA, flags, 0, 0,
+    };
+
+    data_header.len = sizetoh2len(data.len);
+    data_header.stream_id = htonl(sid) >> 1;
+    bufs[i++] = H2GET_BUF(&data_header, sizeof(data_header));
+    bufs[i++] = data;
+
+    if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
+        *err = "Not connected";
+        return -1;
+    }
+
+    ret = ctx->ops->write(&ctx->conn, bufs, i);
+    if (ret < 0) {
+        *err = "Write failed\n";
+        return -1;
+    }
+
+    return 0;
+ }
+
+int h2get_send_headers(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags,
+                       struct h2get_h2_priority *prio, int is_cont, const char **err)
 {
     int ret;
     size_t plen = 0;

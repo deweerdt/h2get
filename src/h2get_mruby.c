@@ -391,7 +391,29 @@ static mrb_value h2get_mruby_getp(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_header(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_send_data(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    const char *err;
+    char *data_str = NULL;
+    int ret, data_len = 0;
+    mrb_int mrb_flags, mrb_stream_id;
+
+    mrb_get_args(mrb, "i|is", &mrb_stream_id, &mrb_flags, &data_str, &data_len);
+
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    ret = h2get_send_data(&h2g->ctx, H2GET_BUF(data_str, data_len), mrb_stream_id, mrb_flags, &err);
+    if (ret < 0) {
+        mrb_value exc;
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
+
+static mrb_value h2get_mruby_send_headers(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
     struct h2get_mruby_priority *h2p;
@@ -435,10 +457,10 @@ static mrb_value h2get_mruby_send_header(mrb_state *mrb, mrb_value self)
     }
     if (has_prio) {
         h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
-        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, &h2p->prio,
+        ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, &h2p->prio,
                                 0, &err);
     } else {
-        ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0,
+        ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0,
                                 &err);
     }
     if (ret < 0) {
@@ -488,7 +510,7 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
     if (!has_flags) {
         mrb_flags = H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
     }
-    ret = h2get_send_header(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 1, &err);
+    ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 1, &err);
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
         mrb->exc = mrb_obj_ptr(exc);
@@ -660,7 +682,7 @@ static mrb_value h2get_mruby_frame_is_end_stream(mrb_state *mrb, mrb_value self)
 
     h2g_frame = mrb_data_get_ptr(mrb, self, &h2get_mruby_frame_type);
     if (h2g_frame->header.type != H2GET_HEADERS_DATA && h2g_frame->header.type != H2GET_HEADERS_HEADERS) {
-        mrb_raise(mrb, E_ARGUMENT_ERROR, "time interval must be positive");
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "Frame type must be DATA or HEADERS");
     }
     return mrb_bool_value(h2g_frame->header.flags & H2GET_HEADERS_HEADERS_FLAG_END_STREAM);
 }
@@ -771,7 +793,8 @@ void run_mruby(const char *rbfile, int argc, char **argv)
 
     mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "getp", h2get_mruby_getp, MRB_ARGS_ARG(3, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_header", h2get_mruby_send_header, MRB_ARGS_ARG(2, 3));
+    mrb_define_method(mrb, h2get_mruby, "send_headers", h2get_mruby_send_headers, MRB_ARGS_ARG(2, 3));
+    mrb_define_method(mrb, h2get_mruby, "send_data", h2get_mruby_send_data, MRB_ARGS_ARG(1, 2));
     mrb_define_method(mrb, h2get_mruby, "send_continuation", h2get_mruby_send_continuation, MRB_ARGS_ARG(2, 1));
 
     mrb_define_method(mrb, h2get_mruby, "on_settings", h2get_mruby_on_settings, MRB_ARGS_ARG(1, 0));
