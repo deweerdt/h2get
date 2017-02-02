@@ -640,7 +640,7 @@ static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
     mrb_value str;
 
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
-    ret = asprintf(&buf, "%s frame <length=%ld, flags=0x%02x, stream_id=%" PRIu32 ">",
+    ret = asprintf(&buf, "%s frame <length=%d, flags=0x%02x, stream_id=%" PRIu32 ">",
                    h2get_frame_type_to_str(h2g_frame->header.type), RSTRING_LEN(h2g_frame->payload),
                    h2g_frame->header.flags, ntohl(h2g_frame->header.stream_id << 1));
     out = H2GET_BUF(buf, ret);
