@@ -457,11 +457,11 @@ static mrb_value h2get_mruby_send_headers(mrb_state *mrb, mrb_value self)
     }
     if (has_prio) {
         h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
-        ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, &h2p->prio,
-                                0, &err);
+        ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags,
+                                 &h2p->prio, 0, &err);
     } else {
         ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0,
-                                &err);
+                                 &err);
     }
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -510,7 +510,8 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
     if (!has_flags) {
         mrb_flags = H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
     }
-    ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 1, &err);
+    ret =
+        h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 1, &err);
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
         mrb->exc = mrb_obj_ptr(exc);

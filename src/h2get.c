@@ -503,8 +503,7 @@ int h2get_send_settings(struct h2get_ctx *ctx, struct h2get_h2_setting *settings
     return 0;
 }
 
-int h2get_send_data(struct h2get_ctx *ctx, struct h2get_buf data, uint32_t sid, int flags,
-                    const char **err)
+int h2get_send_data(struct h2get_ctx *ctx, struct h2get_buf data, uint32_t sid, int flags, const char **err)
 {
     int ret, i = 0;
     struct h2get_buf bufs[2];
@@ -529,7 +528,7 @@ int h2get_send_data(struct h2get_ctx *ctx, struct h2get_buf data, uint32_t sid, 
     }
 
     return 0;
- }
+}
 
 int h2get_send_headers(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags,
                        struct h2get_h2_priority *prio, int is_cont, const char **err)
