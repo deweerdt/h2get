@@ -208,7 +208,7 @@ static h2get_frame_render_t h2get_frame_render_by_type[] = {
 
 h2get_frame_render_t h2get_frame_get_renderer(uint8_t type)
 {
-    if (type >= (sizeof(h2get_frame_render_by_type)/sizeof(h2get_frame_render_by_type[0])))
+    if (type >= (sizeof(h2get_frame_render_by_type) / sizeof(h2get_frame_render_by_type[0])))
         return h2get_frame_render_unknown;
     return h2get_frame_render_by_type[type];
 }
