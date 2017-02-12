@@ -105,6 +105,24 @@ struct h2get_buf {
     size_t len;
 };
 
+static inline int h2get_buf_write(struct h2get_buf *out, struct h2get_buf src)
+{
+    size_t newsz;
+    char *p;
+
+    newsz = out->len + src.len;
+    if (newsz < out->len)
+        return -1;
+    p = realloc(out->buf, newsz);
+    if (!p) {
+        return -1;
+    }
+    out->buf = p;
+    memcpy(out->buf + out->len, src.buf, src.len);
+    out->len = newsz;
+    return src.len;
+}
+
 static inline int h2get_buf_printf(struct h2get_buf *out, char *fmt, ...)
 {
     int ret;

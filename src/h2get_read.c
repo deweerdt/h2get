@@ -115,6 +115,12 @@ static void h2get_frame_render_data(struct h2get_ctx *ctx, struct h2get_buf *out
     dump_zone(payload, plen);
 }
 
+static void h2get_frame_render_unknown(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+                                       char *payload, size_t plen)
+{
+    h2get_buf_write(out, H2GET_BUF(payload, plen));
+}
+
 static void h2get_frame_render_goaway(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
                                       char *payload, size_t plen)
 {
@@ -200,7 +206,12 @@ static h2get_frame_render_t h2get_frame_render_by_type[] = {
     h2get_frame_render_continuation,
 };
 
-h2get_frame_render_t h2get_frame_get_renderer(uint8_t type) { return h2get_frame_render_by_type[type]; }
+h2get_frame_render_t h2get_frame_get_renderer(uint8_t type)
+{
+    if (type >= (sizeof(h2get_frame_render_by_type)/sizeof(h2get_frame_render_by_type[0])))
+        return h2get_frame_render_unknown;
+    return h2get_frame_render_by_type[type];
+}
 
 static struct h2get_h2_header h2get_h2_settings_ack = {
     0, H2GET_HEADERS_SETTINGS, H2GET_HEADERS_SETTINGS_FLAGS_ACK, 0, 0,
@@ -213,10 +224,12 @@ int h2get_send_settings_ack(struct h2get_ctx *ctx, int timeout)
 
 const char *h2get_frame_type_to_str(uint8_t type)
 {
+    static __thread char unknown_err[] = "Unknown frame type 0x00";
     if (type >= 0 && type < H2GET_HEADERS_MAX) {
         return h2get_header_to_txt[type];
     }
-    return "Unknown header type";
+    sprintf(unknown_err, "Unknown frame type 0x%02x", type);
+    return unknown_err;
 }
 
 static unsigned int len24_toh(unsigned int be_24_bits_len)
