@@ -632,6 +632,14 @@ static mrb_value h2get_mruby_frame_type_num(mrb_state *mrb, mrb_value self)
     return mrb_fixnum_value(h2g_frame->header.type);
 }
 
+static mrb_value h2get_mruby_frame_payload(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby_frame *h2g_frame;
+
+    h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
+    return mrb_str_new(mrb, RSTRING_PTR(h2g_frame->payload), RSTRING_LEN(h2g_frame->payload));
+}
+
 static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby_frame *h2g_frame;
@@ -813,6 +821,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby_frame, "type", h2get_mruby_frame_type_str, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "type_num", h2get_mruby_frame_type_num, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "to_s", h2get_mruby_frame_to_s, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_frame, "payload", h2get_mruby_frame_payload, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "flags", h2get_mruby_frame_flags, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "len", h2get_mruby_frame_len, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "stream_id", h2get_mruby_frame_stream_id, MRB_ARGS_ARG(0, 0));
