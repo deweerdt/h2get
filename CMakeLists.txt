@@ -49,7 +49,7 @@ DECL_TEST(test_decode_header_frame src/hpack.c src/read_bits.c src/hpack.c)
 DECL_TEST(test_decode_header_successive_frames src/hpack.c src/read_bits.c src/hpack.c)
 
 ADD_CUSTOM_TARGET(check ${CMAKE_COMMAND} -E env CTEST_OUTPUT_ON_FAILURE=1
-	${CMAKE_CTEST_COMMAND} -C $<CONFIG> --verbose
+	${CMAKE_CTEST_COMMAND}  --verbose
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
 TARGET_LINK_LIBRARIES(h2get ${OPENSSL_LIBRARIES})
