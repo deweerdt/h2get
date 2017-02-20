@@ -145,13 +145,12 @@ static int ssl_read(struct h2get_conn *conn, struct h2get_buf *buf, int tout)
     pending = SSL_pending(conn->priv);
     if (!pending && tout >= 0) {
         ret = wait_for_read(conn->fd, tout);
-        if (ret) {
+        if (ret <= 0) {
             return 0;
         }
     }
     ret = SSL_read(conn->priv, buf->buf, buf->len);
     if (ret <= 0) {
-        fprintf(stderr, "ret is %d, %ld\n", ret, buf->len);
         return -1;
     }
     return ret;

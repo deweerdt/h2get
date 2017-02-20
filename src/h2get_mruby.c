@@ -211,6 +211,7 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
             settings[i].value = mrb_fixnum(RARRAY_PTR(one_setting)[1]);
         }
     }
+    nr_settings = settings_array_len;
     ret = h2get_send_settings(&h2g->ctx, settings, nr_settings, &err);
     if (ret < 0) {
         mrb_value exc;

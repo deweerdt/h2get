@@ -485,16 +485,24 @@ int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err)
 
 int h2get_send_settings(struct h2get_ctx *ctx, struct h2get_h2_setting *settings, int nr_settings, const char **err)
 {
-    int ret;
+    int ret, i;
     struct h2get_h2_header default_settings_frame = {
         sizetoh2len(nr_settings * sizeof(*settings)), H2GET_HEADERS_SETTINGS, 0, 0, 0,
     };
+    struct h2get_h2_setting to_send[nr_settings];
+    struct h2get_buf bufs[2];
 
+    for (i = 0; i < nr_settings; i++) {
+        to_send[i].id = htons(settings[i].id);
+        to_send[i].value = htonl(settings[i].value);
+    }
     if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
         *err = "Not connected";
         return -1;
     }
-    ret = ctx->ops->write(&ctx->conn, &H2GET_BUF(&default_settings_frame, sizeof(default_settings_frame)), 1);
+    bufs[0] = H2GET_BUF(&default_settings_frame, sizeof(default_settings_frame));
+    bufs[1] = H2GET_BUF(to_send, sizeof(to_send));
+    ret = ctx->ops->write(&ctx->conn, bufs, 2);
     if (ret < 0) {
         *err = "Write failed";
         return -1;
