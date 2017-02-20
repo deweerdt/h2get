@@ -817,6 +817,13 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_global_const(mrb, "PADDED", mrb_fixnum_value(0x8));
     mrb_define_global_const(mrb, "PRIORITY", mrb_fixnum_value(0x20));
 
+    mrb_define_global_const(mrb, "SETTINGS_HEADER_TABLE_SIZE", mrb_fixnum_value(0x1));
+    mrb_define_global_const(mrb, "SETTINGS_ENABLE_PUSH", mrb_fixnum_value(0x2));
+    mrb_define_global_const(mrb, "SETTINGS_MAX_CONCURRENT_STREAMS", mrb_fixnum_value(0x3));
+    mrb_define_global_const(mrb, "SETTINGS_INITIAL_WINDOW_SIZE", mrb_fixnum_value(0x4));
+    mrb_define_global_const(mrb, "SETTINGS_MAX_FRAME_SIZE", mrb_fixnum_value(0x5));
+    mrb_define_global_const(mrb, "SETTINGS_MAX_HEADER_LIST_SIZE", mrb_fixnum_value(0x6));
+
     /* Frame */
     mrb_define_method(mrb, h2get_mruby_frame, "type", h2get_mruby_frame_type_str, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "type_num", h2get_mruby_frame_type_num, MRB_ARGS_ARG(0, 0));
