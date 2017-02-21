@@ -24,7 +24,7 @@ IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND SANITIZE)
 	SET(CMAKE_C_FLAGS "-fsanitize=address")
 ENDIF()
 FOREACH(SRC ${SRCS})
-	SET_SOURCE_FILES_PROPERTIES(${SRC} PROPERTIES COMPILE_FLAGS "-std=c11 -g -O0 -fno-omit-frame-pointer -D_GNU_SOURCE -Wall -Wmissing-prototypes -Wstrict-prototypes -Werror")
+	SET_SOURCE_FILES_PROPERTIES(${SRC} PROPERTIES COMPILE_FLAGS "-std=c99 -g -O0 -fno-omit-frame-pointer -D_GNU_SOURCE -Wall -Wmissing-prototypes -Wstrict-prototypes -Werror")
 ENDFOREACH(SRC)
 
 ADD_EXECUTABLE(h2get
