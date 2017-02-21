@@ -48,6 +48,15 @@ __attribute__((unused)) static char *ssl_err(void)
     return errbuf;
 }
 
+static const unsigned char h2_proto_list[] = {2, 'h', '2'};
+
+static __attribute__((unused)) int npn_select_h2(SSL *s, unsigned char **out, unsigned char *outlen,
+                                                 const unsigned char *in, unsigned int inlen,
+                                                 void *arg)
+{
+    SSL_select_next_proto(out, outlen, in, inlen, h2_proto_list, sizeof(h2_proto_list));
+    return SSL_TLSEXT_ERR_OK;
+}
 static int ssl_connect(struct h2get_conn *conn, void *priv)
 {
     int ret;
@@ -56,7 +65,6 @@ static int ssl_connect(struct h2get_conn *conn, void *priv)
     SSL_CTX *ssl_ctx = priv;
     long ctx_opts;
     char *servername;
-    static const unsigned char h2_alpn[] = {2, 'h', '2'};
 
     servername = H2GET_TO_STR_ALLOCA(conn->servername);
     conn->fd = socket(conn->sa.sa->sa_family, conn->socktype, conn->protocol);
@@ -81,10 +89,14 @@ static int ssl_connect(struct h2get_conn *conn, void *priv)
     if (!ret) {
         goto err2;
     }
-    ret = SSL_set_alpn_protos(ssl, h2_alpn, sizeof(h2_alpn));
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+    ret = SSL_set_alpn_protos(ssl, h2_proto_list, sizeof(h2_proto_list));
     if (ret) {
         goto err2;
     }
+#else
+    SSL_CTX_set_next_proto_select_cb(ssl_ctx, npn_select_h2, NULL);
+#endif
 
     SSL_set_connect_state(ssl);
 
