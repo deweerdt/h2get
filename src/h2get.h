@@ -90,6 +90,7 @@ static inline void dump_zone(void *buf, int len)
 
 #define H2GET_DOT_STAR_PRINTF(s) ((int)(s)->len), ((s)->buf)
 #define H2GET_STRLIT(s) (s), (sizeof((s)) - 1)
+#define H2GET_BUFLIT_ELMS(s) (s), (sizeof((s)) - 1)
 #define H2GET_BUFLIT(s) ((struct h2get_buf){(s), (sizeof((s)) - 1)})
 #define H2GET_BUFSTR(s) ((struct h2get_buf){(s), strlen(s)})
 #define H2GET_BUF(b, l) ((struct h2get_buf){(void *)b, l})
