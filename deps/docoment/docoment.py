@@ -9,6 +9,7 @@ import json
 import shlex
 import jinja2
 import fnmatch
+import argparse
 import subprocess
 import clang.cindex
 import ConfigParser
@@ -223,5 +224,10 @@ class Docoment(object):
         if self.output_html:
             self.generate_html('index.html')
 
-doc = Docoment()
-doc.run()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config", help="Path to the docofile", default=None)
+    args = parser.parse_args()
+
+    doc = Docoment(args.config)
+    doc.run()

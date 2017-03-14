@@ -9,5 +9,5 @@ files = *.c
 json = true
 html = true
 
-[templates]
-path = ./templates
+[html]
+templates = ./templates
