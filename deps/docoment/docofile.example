@@ -1,0 +1,13 @@
+[project]
+name = project-name 
+path = <path>/src
+       <path>/include
+extra_args = -I <path>/include
+files = *.c
+
+[output]
+json = true
+html = true
+
+[templates]
+path = ./templates
