@@ -78,7 +78,7 @@ IF (NOT WITH_MRUBY_INCLUDE OR NOT WITH_MRUBY_LIB)
 			MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby ruby minirake
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-1.2.0)
 
-    TARGET_INCLUDE_DIRECTORIES(h2get BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-1.2.0/include)
+    INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-1.2.0/include)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2get "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a" m)
     ADD_DEPENDENCIES(h2get mruby)
@@ -89,3 +89,17 @@ ENDIF ()
 
 INSTALL(TARGETS h2get
         RUNTIME DESTINATION bin)
+
+#
+# Docs
+#
+GET_PROPERTY(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
+FOREACH(dir ${dirs})
+    SET(INCL_DIRS "${INCL_DIRS} -I${dir}")
+ENDFOREACH()
+
+
+ADD_CUSTOM_TARGET(docs env CFLAGS=${INCL_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/deps/docoment/docoment.py -c ${CMAKE_CURRENT_SOURCE_DIR}/srcdoc/docofile
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
+
