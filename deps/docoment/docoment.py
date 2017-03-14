@@ -74,7 +74,7 @@ class Docoment(object):
         self.extra_args = self._get_default_includes()
         if config.has_option('project', 'extra_args'):
             self.extra_args.extend(shlex.split(config.get('project', 'extra_args')))
-        if os.environ.get('CFLAGS') is not None:
+        if os.environ.get('CFLAGS'):
             self.extra_args.extend(shlex.split(os.environ.get('CFLAGS')))
         self._register_hooks()
 
