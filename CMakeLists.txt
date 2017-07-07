@@ -80,12 +80,13 @@ IF (NOT WITH_MRUBY_INCLUDE OR NOT WITH_MRUBY_LIB)
 
     TARGET_INCLUDE_DIRECTORIES(h2get BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-1.2.0/include)
     # note: the paths need to be determined before libmruby.flags.mak is generated
-    TARGET_LINK_LIBRARIES(h2get "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a" m)
+    TARGET_LINK_LIBRARIES(h2get "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a")
     ADD_DEPENDENCIES(h2get mruby)
 ELSE ()
-    TARGET_LINK_LIBRARIES(h2get "${WITH_MRUBY_LIB}" m)
+    TARGET_LINK_LIBRARIES(h2get "${WITH_MRUBY_LIB}")
     TARGET_INCLUDE_DIRECTORIES(h2get BEFORE PRIVATE ${WITH_MRUBY_INCLUDE})
 ENDIF ()
+TARGET_LINK_LIBRARIES(h2get rt m)
 
 INSTALL(TARGETS h2get
         RUNTIME DESTINATION bin)
