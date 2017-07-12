@@ -37,7 +37,8 @@ matrix:
           # H2GET
         - cmake -DOPENSSL_ROOT_DIR=$PWD/openssl .
         - make
-        - ./h2get firefox.rb www.fastly.com
+        - make test
+        - ./h2get firefox.rb www.google.com
     - os: linux
       dist: precise
       sudo: required
