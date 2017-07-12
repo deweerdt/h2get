@@ -89,7 +89,7 @@ static int ssl_connect(struct h2get_conn *conn, void *priv)
     if (!ret) {
         goto err2;
     }
-#if OPENSSL_VERSION_NUMBER >= 0x10002000L
+#if OPENSSL_VERSION_NUMBER >= 0x10002000L || defined(LIBRESSL_VERSION_NUMBER)
     ret = SSL_set_alpn_protos(ssl, h2_proto_list, sizeof(h2_proto_list));
     if (ret) {
         goto err2;
