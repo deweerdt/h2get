@@ -18,7 +18,7 @@ matrix:
         - tar -xf cmake-2.8.12.1.tar.gz
         - cd cmake-2.8.12.1/
         - cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_CursesDialog=OFF -DBUILD_TESTING=OFF .
-        - make && make install
+        - make && sudo make install
         - cd ..
         # OpenSSL 1.0.2
         - mkdir -p openssl
@@ -29,7 +29,7 @@ matrix:
         - ./config --prefix="$OPENSSL_PREFIX" --openssldir="${OPENSSL_PREFIX}/etc/ssl" --libdir=lib shared zlib-dynamic
         - make depend
         - make
-        - make install_sw
+        - sudo make install_sw
         - cd ..
           # H2GET
         - cmake -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" .
