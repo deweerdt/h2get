@@ -26,17 +26,16 @@ matrix:
         - cd ..
         # OpenSSL 1.0.2
         - mkdir -p openssl
-        - export OPENSSL_PREFIX="$PWD/openssl"
         - curl -O https://www.openssl.org/source/openssl-1.0.2k.tar.gz
         - tar -xf openssl-1.0.2k.tar.gz
         - cd openssl-1.0.2k
-        - ./config --prefix="$OPENSSL_PREFIX" --openssldir="${OPENSSL_PREFIX}/etc/ssl" --libdir=lib shared zlib-dynamic
+        - ./config --prefix="$PWD/openssl" --openssldir="$PWD/openssl/etc/ssl" --libdir=lib shared zlib-dynamic
         - make depend
         - make
         - sudo make install_sw
         - cd ..
           # H2GET
-        - cmake -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" .
+        - cmake -DOPENSSL_ROOT_DIR=$PWD/openssl .
         - make
         - ./h2get firefox.rb www.fastly.com
     - os: linux
