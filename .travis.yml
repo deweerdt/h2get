@@ -27,12 +27,12 @@ matrix:
         - curl -O https://mirrors.sonic.net/pub/OpenBSD/LibreSSL/libressl-2.5.4.tar.gz
         - tar -xf libressl-2.5.4.tar.gz
         - cd libressl-2.5.4
-        - ./configure --prefix=$PWD/../libressl-build
+        - ./configure --prefix=$HOME/libressl-build
         - make
         - make install
         - cd ..
           # H2GET
-        - cmake -DOPENSSL_ROOT_DIR=$PWD/libressl-build .
+        - cmake -DOPENSSL_ROOT_DIR=$HOME/libressl-build .
         - make
         - make test
         - ./h2get firefox.rb www.fastly.com
