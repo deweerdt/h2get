@@ -32,7 +32,7 @@ matrix:
         - make install
         - cd ..
           # H2GET
-        - cmake -DOPENSSL_ROOT_DIR=$HOME/libressl-build .
+        - cmake -DH2GET_SSL_ROOT_DIR=$HOME/libressl-build .
         - make
         - make test
         - ./h2get firefox.rb www.fastly.com
