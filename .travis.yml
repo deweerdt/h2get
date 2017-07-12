@@ -17,25 +17,22 @@ matrix:
         - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 60 --slave /usr/bin/g++ g++ /usr/bin/g++-6
       script: &s
         # Cmake 2.8.12
-        - mkdir -p cmake
         - curl -O https://cmake.org/files/v2.8/cmake-2.8.12.1.tar.gz
         - tar -xf cmake-2.8.12.1.tar.gz
         - cd cmake-2.8.12.1/
         - cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_CursesDialog=OFF -DBUILD_TESTING=OFF .
         - make && sudo make install
         - cd ..
-        # OpenSSL 1.0.2
-        - mkdir -p openssl
-        - curl -O https://www.openssl.org/source/openssl-1.0.2k.tar.gz
-        - tar -xf openssl-1.0.2k.tar.gz
-        - cd openssl-1.0.2k
-        - ./config --prefix="$PWD/openssl" --openssldir="$PWD/openssl/etc/ssl" --libdir=lib shared zlib-dynamic
-        - make depend
+        # LibreSSL
+        - curl -O https://mirrors.sonic.net/pub/OpenBSD/LibreSSL/libressl-2.5.4.tar.gz
+        - tar -xf libressl-2.5.4.tar.gz
+        - cd libressl-2.5.4
+        - ./configure --prefix=$PWD/../libressl-build
         - make
-        - sudo make install_sw
+        - make install
         - cd ..
           # H2GET
-        - cmake -DOPENSSL_ROOT_DIR=$PWD/openssl .
+        - cmake -DOPENSSL_ROOT_DIR=$PWD/libressl-build .
         - make
         - make test
         - ./h2get firefox.rb www.google.com
