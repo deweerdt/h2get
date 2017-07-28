@@ -90,6 +90,14 @@ static void h2get_frame_render_headers(struct h2get_ctx *ctx, struct h2get_buf *
         h2get_buf_printf(out, "\nError decoding headers");
         return;
     }
+    h2get_buf_printf(out, "\n\tcompressed: ");
+    for (cur = headers.next; cur != &headers; cur = cur->next) {
+        struct h2get_decoded_header *hdh = list_to_dh(cur);
+        if (hdh->compressed)  {
+            h2get_buf_printf(out, "'%.*s' ", hdh->key.len, hdh->key.buf);
+        }
+    }
+
     for (cur = headers.next; cur != &headers; cur = next) {
         struct h2get_decoded_header *hdh = list_to_dh(cur);
 
