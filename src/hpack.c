@@ -547,6 +547,8 @@ static struct h2get_decoded_header *add_one_header(struct h2get_hpack_ctx *hhc, 
         newh->key = hbuf;
     }
     if (!only_index) {
+        if (**buf & 0x80)
+            newh->compressed = 1;
         new_buf = decode_string(*buf, end, &hbuf);
         if (!new_buf) {
             goto err;
@@ -563,8 +565,10 @@ static struct h2get_decoded_header *add_one_header(struct h2get_hpack_ctx *hhc, 
     return newh;
 
 err:
-    free(newh->key.buf);
-    free(newh->value.buf);
+    if (newh->key.buf)
+        free(newh->key.buf);
+    if (newh->value.buf)
+        free(newh->value.buf);
     free(newh);
     return NULL;
 }
@@ -595,7 +599,7 @@ int h2get_hpack_decode(struct h2get_hpack_ctx *hhc, char *payload, size_t plen, 
         } else if (*buf & 0x40) {
             needs_indexing = 1;
             /* 6.2.1.  Literal Header Field with Incremental Indexing */
-            if (*buf & ~0x40)
+            if (*buf & 0x3f)
                 prefix = 6;
             else
                 prefix = 0;

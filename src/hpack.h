@@ -7,6 +7,7 @@ struct h2get_decoded_header {
     struct h2get_buf key;
     struct h2get_buf value;
     struct list node;
+    unsigned char compressed : 1;
 };
 #define list_to_dh(ln) (container_of((ln), struct h2get_decoded_header, node))
 
