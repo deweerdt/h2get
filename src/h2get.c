@@ -254,7 +254,7 @@ int h2get_close(struct h2get_ctx *ctx)
 
 void h2get_destroy(struct h2get_ctx *ctx)
 {
-    if (ctx->ops->fini) {
+    if (ctx->ops && ctx->ops->fini) {
         ctx->ops->fini(ctx->xprt_priv);
     }
     free(ctx->registered_ops);
