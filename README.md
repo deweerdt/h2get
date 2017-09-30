@@ -16,7 +16,7 @@ Connects to a URL (only https is implemented currently)
 
 Sends the HTTP/2 connection prefix
 
-### H2.send_settings()
+### H2.send_settings([[key, value],...])
 
 Sends an SETTINGS frame
 
@@ -24,7 +24,7 @@ Sends an SETTINGS frame
 
 Sends a SETTINGS frame with the ack flag
 
-### H2.send_priority()
+### H2.send_priority(stream_id, dependent_stream_id, exclusive_flag, weight)
 
 Send a PRIORITY frame
 
@@ -33,15 +33,19 @@ Send a PRIORITY frame
 
 Send a WINDOW_UPDATE frame
 
-### H2.get(path)
+### H2.send_ping(<optional payload>)
+
+Sends a PING frame
+
+### H2.send_headers({headers}, stream_id, flags, priority)
 
 Sends a HEADER frame
 
-### H2.getp(path)
+### H2.send_data(stream_id, flags, data)
 
-Sends a HEADER frame with priority information
+Sends a DATA frame
 
-### H2.read(timeout)
+### H2.read(timeout_ms)
 
 Reads a Frame, or times out. Returns nil on timeout
 
@@ -84,5 +88,5 @@ For types that support it (`PING`, `SETTINGS`) send a ack frame
 
 ### Priority.new(dependent_sid, exclusive, weight)
 
-Creates a new priority object (to be used with H2.getp)
+Creates a new priority object (to be used with H2.send_headers)
 
