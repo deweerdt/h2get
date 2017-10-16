@@ -266,49 +266,20 @@ __attribute__((unused)) static uint8_t *encode_int(uint8_t *out, unsigned long i
     return out;
 }
 
+/**
+ * @brief Decode an integer following the description in rfc7541#section-5.1
+ *
+ * @param buf Start of the buffer
+ * @param end End of the buffer
+ * @param prefix The number of bits of the prefix
+ * @param i The decoded integer
+ *
+ * @return A pointer to the next unread byte in buf
+ */
 static uint8_t *decode_int(uint8_t *buf, uint8_t *end, size_t prefix, unsigned long *i)
 {
-    unsigned long next_i = 0;
-    unsigned long m = 0;
-    uint8_t b;
-
-    if (buf >= end) {
-        return NULL;
-    }
-
-    /*
-     * decode I from the next N bits
-     *   if I < 2^N - 1, return I
-     *   else
-     *       M = 0
-     *       repeat
-     *           B = next octet
-     *           I = I + (B & 127) * 2^M
-     *           M = M + 7
-     *       while B & 128 == 128
-     *       return I
-     */
-
-    *i = (*buf) & ((1UL << prefix) - 1UL);
-    buf++;
-
-    if (*i < ((1UL << prefix) - 1UL)) {
-        return buf;
-    }
-    m = 0;
-    do {
-        if (buf >= end) {
-            return NULL;
-        }
-        b = *buf++;
-        next_i = *i + (b & 127) * (1UL << m);
-        if (*i > next_i) {
-            return NULL;
-        }
-        *i = next_i;
-        m = m + 7;
-    } while ((b & 128) == 128);
-    return buf;
+    /* https://tools.ietf.org/html/rfc7541#section-5.1 */
+    return NULL;
 }
 
 uint8_t *decode_string(uint8_t *buf, uint8_t *end, struct h2get_buf *ret)
