@@ -686,7 +686,7 @@ int main(int argc, char **argv)
 
     signal(SIGPIPE, SIG_IGN);
 
-    if (argc < 1) {
+    if (argc <= 1) {
         usage();
     }
     extra_args = (argc - 2) >= 0;
