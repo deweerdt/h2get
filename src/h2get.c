@@ -676,7 +676,7 @@ int h2get_get(struct h2get_ctx *ctx, const char *path, const char **err)
 
 static void usage(void)
 {
-    fprintf(stderr, "Usage: h2g [filename.rb]>\n");
+    fprintf(stderr, "Usage: h2g [filename.rb]\n");
     exit(EXIT_FAILURE);
 }
 
