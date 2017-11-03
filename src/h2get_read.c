@@ -246,19 +246,34 @@ static unsigned int len24_toh(unsigned int be_24_bits_len)
     return ntohl(be_24_bits_len & 0xffffff00);
 }
 
+static const char *do_read(struct h2get_ctx *ctx, struct h2get_buf *buf, int timeout)
+{
+    int ret;
+    do {
+        ret = ctx->ops->read(&ctx->conn, buf, timeout);
+        if (ret <= 0) {
+            if (!ret) {
+                return err_read_timeout;
+            } else {
+                return "read failed";
+            }
+        }
+        buf->len -= ret;
+        buf->buf += ret;
+    } while (buf->len > 0);
+
+    return NULL;
+}
+
 const char *err_read_timeout = "read failed: timeout";
 int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, struct h2get_buf *buf, int timeout,
                          const char **err)
 {
-    int ret, plen;
+    int plen;
     char *payload = NULL;
 
-    ret = ctx->ops->read(&ctx->conn, &H2GET_BUF(header, sizeof(*header)), timeout);
-    if (ret < 0) {
-        *err = "read failed";
-        return -1;
-    } else if (ret == 0) {
-        *err = err_read_timeout;
+    *err = do_read(ctx, &H2GET_BUF(header, sizeof(*header)), timeout);
+    if (*err != NULL) {
         return -1;
     }
 
@@ -269,20 +284,11 @@ int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, 
         return 0;
     }
     payload = malloc(plen);
-    size_t to_read = plen;
-    do {
-        ret = ctx->ops->read(&ctx->conn, &H2GET_BUF(payload + (plen - to_read), to_read), timeout);
-        if (ret <= 0) {
-            if (!ret) {
-                *err = err_read_timeout;
-            } else {
-                *err = "read failed";
-            }
-            free(payload);
-            return -1;
-        }
-        to_read -= ret;
-    } while (to_read > 0);
+    *err = do_read(ctx, &H2GET_BUF(payload, plen), timeout);
+    if (*err != NULL) {
+        free(payload);
+        return -1;
+    }
 
     buf->len = plen;
     buf->buf = payload;
