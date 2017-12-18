@@ -545,6 +545,33 @@ static mrb_value h2get_mruby_send_window_update(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2get_mruby_send_goaway(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    int ret;
+    const char *err;
+    mrb_int mrb_last_stream_id, mrb_error_code;
+    mrb_value mrb_add;
+    uint32_t last_stream_id, error_code;
+    struct h2get_buf additional;
+
+    mrb_get_args(mrb, "ii|S", &mrb_last_stream_id, &mrb_error_code, &mrb_add);
+    last_stream_id = (uint32_t)mrb_last_stream_id;
+    error_code = (uint32_t)mrb_error_code;
+    additional = mrb_nil_p(mrb_add) ? H2GET_BUF_NULL : H2GET_BUF(RSTRING_PTR(mrb_add), RSTRING_LEN(mrb_add));
+
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    ret = h2get_send_goaway(&h2g->ctx, last_stream_id, error_code, additional, &err);
+    if (ret < 0) {
+        mrb_value exc;
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
+
 static mrb_value h2get_mruby_send_settings_ack(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
@@ -813,6 +840,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "send_ping", h2get_mruby_send_ping, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "send_rst_stream", h2get_mruby_send_rst_stream, MRB_ARGS_ARG(2, 1));
     mrb_define_method(mrb, h2get_mruby, "send_window_update", h2get_mruby_send_window_update, MRB_ARGS_ARG(2, 0));
+    mrb_define_method(mrb, h2get_mruby, "send_goaway", h2get_mruby_send_goaway, MRB_ARGS_ARG(2, 1));
 
     mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "getp", h2get_mruby_getp, MRB_ARGS_ARG(3, 0));
