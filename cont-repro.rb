@@ -1,7 +1,7 @@
 begin
     to_process = []
     h2g = H2.new
-    host = ARGV[0] || "www.fastly.com"
+    host = ARGV[0] || "www.google.com"
     puts "#######################"
     puts "# #{host}"
     puts "#######################"
@@ -30,9 +30,9 @@ begin
         ":method" => "GET",
         ":authority" => host,
         ":scheme" => "https",
-        ":path" => "/?1",
+        ":path" => "/",
     }
-    h2g.send_header(req, 15, 0)
+    h2g.send_headers(req, 15, 0)
     h2g.send_continuation({"x-test" => "1"}, 15, END_STREAM | END_HEADERS)
 
     open_streams[15] = 1
