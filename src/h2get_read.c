@@ -44,7 +44,6 @@ static char *h2get_header_to_txt[] = {
     }
 
 RENDERER(priority)
-RENDERER(rst_stream)
 RENDERER(push_promise)
 RENDERER(ping)
 RENDERER(continuation)
@@ -127,6 +126,13 @@ static void h2get_frame_render_unknown(struct h2get_ctx *ctx, struct h2get_buf *
                                        char *payload, size_t plen)
 {
     h2get_buf_write(out, H2GET_BUF(payload, plen));
+}
+
+static void h2get_frame_render_rst_stream(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+                                          char *payload, size_t plen)
+{
+    h2get_buf_printf(out, "\n\terror_code => %lu", ntohl(*(uint32_t *)payload));
+    return;
 }
 
 static void h2get_frame_render_goaway(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
