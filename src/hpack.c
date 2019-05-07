@@ -388,7 +388,6 @@ uint8_t *decode_string(uint8_t *buf, uint8_t *end, struct h2get_buf *ret)
             }
         }
         if (!found) {
-            fprintf(stderr, "%s:%d\n", __func__, __LINE__);
             return NULL;
         }
     }
