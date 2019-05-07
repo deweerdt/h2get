@@ -388,6 +388,7 @@ uint8_t *decode_string(uint8_t *buf, uint8_t *end, struct h2get_buf *ret)
             }
         }
         if (!found) {
+            fprintf(stderr, "%s:%d\n", __func__, __LINE__);
             return NULL;
         }
     }
@@ -535,8 +536,9 @@ static struct h2get_decoded_header *add_one_header(struct h2get_hpack_ctx *hhc, 
     struct h2get_buf hbuf;
 
     if (index) {
-        if (init_via_index(hhc, newh, index) < 0)
+        if (init_via_index(hhc, newh, index) < 0) {
             goto err;
+        }
     } else {
         *buf += 1;
         new_buf = decode_string(*buf, end, &hbuf);
@@ -609,13 +611,6 @@ int h2get_hpack_decode(struct h2get_hpack_ctx *hhc, char *payload, size_t plen, 
                 prefix = 4;
             else
                 prefix = 0;
-        } else if (*buf & 0x10) {
-            /* 6.2.3.  Literal Header Field Never Indexed */
-            if (*buf & 0x0f)
-                prefix = 4;
-            else
-                prefix = 0;
-
         } else if (*buf & 0x20) {
             /* 6.3.  Dynamic Table Size Update */
             new_buf = decode_int(buf, end, 5, &i);
@@ -624,8 +619,16 @@ int h2get_hpack_decode(struct h2get_hpack_ctx *hhc, char *payload, size_t plen, 
             }
             buf = new_buf;
             /* FIXME: take `i` into account */
+            fprintf(stdout, "dyn table resize to %ld\n", i);
             continue;
+        } else if (*buf & 0x10) {
+            /* 6.2.3.  Literal Header Field Never Indexed */
+            if (*buf & 0x0f)
+                prefix = 4;
+            else
+                prefix = 0;
         }
+
 
         switch (prefix) {
         case -1:
@@ -1013,4 +1016,56 @@ int test_decode_header_successive_frames(void)
     return 0;
 }
 #endif
+
+#ifdef HPACK_DECODER
+static ssize_t todec(char c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
+}
+int main(int argc, char **argv)
+{
+
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s [hexencoded payload]\n", argv[0]);
+        exit(1);
+    }
+    int i = 0;
+    char buf[strlen(argv[1])/2];
+    const char *str = argv[1];
+    while (str[0] && str[1]) {
+        buf[i++] = todec(str[0]) << 4 | todec(str[1]);
+        str += 2;
+    }
+    struct h2get_hpack_ctx hhc;
+    struct list headers, *cur, *next;
+    int ret;
+    h2get_hpack_ctx_init(&hhc, 256);
+    list_init(&headers);
+    ret = h2get_hpack_decode(&hhc, buf, sizeof(buf), &headers);
+    assert(ret > 0);
+
+    for (cur = headers.next; cur != &headers; cur = next) {
+        struct h2get_decoded_header *hdh = list_to_dh(cur);
+
+        next = cur->next;
+        list_del(&hdh->node);
+
+        fprintf(stdout, "[%.*s] => ", (int)hdh->key.len, hdh->key.buf);
+        fprintf(stdout, "[%.*s]\n", (int)hdh->value.len, hdh->value.buf);
+
+        free(hdh->key.buf);
+        free(hdh->value.buf);
+        free(hdh);
+        i++;
+    }
+    return 0;
+}
+#endif /* HPACK_DECODER */
+
 /* vim: set expandtab ts=4 sw=4: */

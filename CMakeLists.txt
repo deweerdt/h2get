@@ -34,9 +34,9 @@ FOREACH(SRC ${SRCS})
     SET_SOURCE_FILES_PROPERTIES(${SRC} PROPERTIES COMPILE_FLAGS "-std=c99 -g -O0 -fno-omit-frame-pointer -D_GNU_SOURCE -Wall -Wmissing-prototypes -Wstrict-prototypes -Werror")
 ENDFOREACH(SRC)
 
-ADD_EXECUTABLE(h2get
-    ${SRCS}
-)
+ADD_EXECUTABLE(h2get ${SRCS})
+ADD_EXECUTABLE(hpack_decoder src/hpack.c src/read_bits.c)
+SET_TARGET_PROPERTIES(hpack_decoder PROPERTIES COMPILE_FLAGS "-DHPACK_DECODER")
 
 #
 # Tests
