@@ -589,6 +589,27 @@ static mrb_value h2get_mruby_send_settings_ack(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2get_mruby_send_raw_frame(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    const char *err;
+    char *data_str = NULL;
+    int ret, data_len = 0;
+    mrb_int mrb_flags, mrb_stream_id, mrb_type;
+
+    mrb_get_args(mrb, "ii|is", &mrb_stream_id, &mrb_type, &mrb_flags, &data_str, &data_len);
+
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    ret = h2get_send_raw_frame(&h2g->ctx, mrb_type, mrb_flags, mrb_stream_id, H2GET_BUF(data_str, data_len), &err);
+    if (ret < 0) {
+        mrb_value exc;
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
 static mrb_value h2get_mruby_on_settings(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby_frame *h2g_frame;
@@ -841,6 +862,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "send_rst_stream", h2get_mruby_send_rst_stream, MRB_ARGS_ARG(2, 1));
     mrb_define_method(mrb, h2get_mruby, "send_window_update", h2get_mruby_send_window_update, MRB_ARGS_ARG(2, 0));
     mrb_define_method(mrb, h2get_mruby, "send_goaway", h2get_mruby_send_goaway, MRB_ARGS_ARG(2, 1));
+    mrb_define_method(mrb, h2get_mruby, "send_raw_frame", h2get_mruby_send_raw_frame, MRB_ARGS_ARG(2, 2));
 
     mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "getp", h2get_mruby_getp, MRB_ARGS_ARG(3, 0));

@@ -45,6 +45,12 @@ Sends a HEADER frame
 
 Sends a DATA frame
 
+### H2.send_raw_frame(stream_id, type, flags, payload)
+
+Sends an arbitrary HTTP/2 frame.
+This functions is mainly for testing HTTP/2 server implementation, for example sending an unsupported frame type to see how the server handles it.
+Generally users are encouraged to use more specialized functions (e.g. `send_headers`) as long as they satisfy the needs.
+
 ### H2.read(timeout_ms)
 
 Reads a Frame, or times out. Returns nil on timeout
