@@ -43,6 +43,8 @@ begin
     h2g.send_headers(req1, 15, PRIORITY | END_STREAM, prio_low)
     h2g.send_continuation({}, 15, END_HEADERS)
     h2g.send_headers(req2, 17, 37, prio_low)
+    # Send ping frame (type=0x6) to test send_raw_frame
+    h2g.send_raw_frame(0, 0x6, 0, "76543210")
     open_streams[15] = 1
     open_streams[17] = 1
     while open_streams.length > 0
