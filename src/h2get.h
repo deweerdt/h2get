@@ -321,6 +321,7 @@ int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2g
 int h2get_send_data(struct h2get_ctx *ctx, struct h2get_buf data, uint32_t sid, int flags, const char **err);
 int h2get_send_headers(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags, struct h2get_h2_priority *prio, int is_cont, const char **err);
 int h2get_send_goaway(struct h2get_ctx *ctx, uint32_t last_stream_id, uint32_t error_code, struct h2get_buf additional, const char **err);
+int h2get_send_raw_frame(struct h2get_ctx *ctx, uint8_t type, int flags, uint32_t sid, struct h2get_buf data, const char **err);
 const char *h2get_render_error_code(uint32_t err);
 
 int h2get_send_settings_ack(struct h2get_ctx *ctx, int timeout);

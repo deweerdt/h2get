@@ -619,6 +619,28 @@ int h2get_send_goaway(struct h2get_ctx *ctx, uint32_t last_stream_id, uint32_t e
     return 0;
 }
 
+int h2get_send_raw_frame(struct h2get_ctx *ctx, uint8_t type, int flags, uint32_t sid, struct h2get_buf data, const char **err)
+{
+    int ret, i = 0;
+    struct h2get_buf bufs[2];
+    struct h2get_h2_header data_header = {
+        0, type, flags, 0, 0,
+    };
+
+    data_header.len = sizetoh2len(data.len);
+    data_header.stream_id = htonl(sid) >> 1;
+    bufs[i++] = H2GET_BUF(&data_header, sizeof(data_header));
+    bufs[i++] = data;
+
+    ret = ctx->ops->write(&ctx->conn, bufs, i);
+    if (ret < 0) {
+        *err = "Write failed\n";
+        return -1;
+    }
+
+    return 0;
+}
+
 int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2get_h2_priority prio, const char **err)
 {
     int ret;
