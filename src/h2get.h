@@ -284,7 +284,9 @@ static inline void h2get_h2_priority_set_exclusive(struct h2get_h2_priority *pri
 {
     uint32_t excl_dep_stream_id = ntohl(prio->excl_dep_stream_id);
     if (exclusive) {
-        excl_dep_stream_id &= 0x80000000;
+        excl_dep_stream_id |= 0x80000000;
+    } else {
+        excl_dep_stream_id &= 0x7fffffff;
     }
     prio->excl_dep_stream_id = htonl(excl_dep_stream_id);
 }
