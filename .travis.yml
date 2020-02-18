@@ -37,7 +37,7 @@ matrix:
         - make test
         - ./h2get firefox.rb www.fastly.com
     - os: linux
-      dist: precise
+      dist: xenial
       sudo: required
       before_install:
         - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
