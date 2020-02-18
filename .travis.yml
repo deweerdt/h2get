@@ -44,4 +44,5 @@ matrix:
         - sudo apt-get update --yes
       script: *s
     - os: macosx
+      sudo: required
       script: *s
