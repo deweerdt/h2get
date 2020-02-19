@@ -20,7 +20,7 @@ matrix:
         - curl -O https://cmake.org/files/v2.8/cmake-2.8.12.1.tar.gz
         - tar -xf cmake-2.8.12.1.tar.gz
         - cd cmake-2.8.12.1/
-        - cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_CursesDialog=OFF -DBUILD_TESTING=OFF .
+        - cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DBUILD_CursesDialog=OFF -DBUILD_TESTING=OFF .
         - make && sudo make install
         - cd ..
         # LibreSSL
@@ -37,11 +37,12 @@ matrix:
         - make test
         - ./h2get firefox.rb www.fastly.com
     - os: linux
-      dist: precise
+      dist: xenial
       sudo: required
       before_install:
         - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
         - sudo apt-get update --yes
       script: *s
     - os: macosx
+      sudo: required
       script: *s
