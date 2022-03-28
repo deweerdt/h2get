@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <stdarg.h>
@@ -51,6 +52,8 @@
 #define H2GET_HEADERS_HEADERS_FLAG_PRIORITY 0x20
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+
+#define H2GET_CONNECTION_PREFACE "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -173,10 +176,12 @@ enum h2get_transport {
     H2GET_TRANSPORT_SSL,
 };
 
+struct h2get_ctx;
 struct h2get_ops {
     enum h2get_transport xprt;
-    void *(*init)(void);
+    void *(*init)(struct h2get_ctx *, const char **);
     int (*connect)(struct h2get_conn *, void *);
+    int (*accept)(struct h2get_conn *, struct h2get_conn *, void *);
     int (*write)(struct h2get_conn *, struct h2get_buf *bufs, size_t nr_bufs);
     int (*read)(struct h2get_conn *, struct h2get_buf *buf, int tout);
     int (*close)(struct h2get_conn *, void *);
@@ -306,10 +311,13 @@ struct h2get_h2_goaway {
 
 struct h2get_ctx;
 void h2get_ctx_init(struct h2get_ctx *ctx);
+bool h2get_ctx_is_server(struct h2get_ctx *ctx);
 void h2get_ctx_on_settings_ack(struct h2get_ctx *ctx);
 struct h2get_h2_settings;
 int h2get_ctx_on_peer_settings(struct h2get_ctx *ctx, struct h2get_h2_header *h, char *payload, int plen);
 int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **err);
+int h2get_listen(struct h2get_ctx *ctx, struct h2get_buf url_buf, int backlog, const char **err);
+int h2get_accept(struct h2get_ctx *ctx, const char **err);
 int h2get_close(struct h2get_ctx *ctx);
 void h2get_destroy(struct h2get_ctx *ctx);
 int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_h2_priority *prio, const char **err);
@@ -330,6 +338,8 @@ int h2get_send_settings_ack(struct h2get_ctx *ctx, int timeout);
 typedef void (*h2get_frame_render_t)(struct h2get_ctx *ctx, struct h2get_buf *, struct h2get_h2_header *, char *, size_t);
 h2get_frame_render_t h2get_frame_get_renderer(uint8_t type);
 const char *h2get_frame_type_to_str(uint8_t type);
+
+int h2get_expect_prefix(struct h2get_ctx *ctx, int timeout, const char **err);
 
 extern const char *err_read_timeout;
 int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, struct h2get_buf *buf, int timeout, const char **err);
@@ -390,6 +400,12 @@ struct h2get_ctx {
     struct h2get_hpack_ctx own_hpack;
 
     struct h2get_url url;
+
+    struct {
+        const char *cert_path;
+        const char *key_path;
+        struct h2get_conn listener;
+    } server;
 };
 
 

@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <sys/un.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <stdlib.h>
@@ -79,11 +80,49 @@ static mrb_value h2get_mruby_init(mrb_state *mrb, mrb_value self)
     return self;
 }
 
+static mrb_value h2get_mruby_server_init(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    H2GET_MRUBY_ASSERT_ARGS(1);
+
+    mrb_value opts;
+    mrb_get_args(mrb, "H", &opts);
+    mrb_value cert_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "cert_path"));
+    if (mrb_nil_p(cert_path)) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "cert_path is missing"));
+        return mrb_nil_value();
+    }
+    mrb_value key_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "key_path"));
+    if (mrb_nil_p(key_path)) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "key_path is missing"));
+        return mrb_nil_value();
+    }
+
+    h2g = (struct h2get_mruby *)mrb_malloc(mrb, sizeof(*h2g));
+
+    h2get_ctx_init(&h2g->ctx);
+    h2g->ctx.server.cert_path = mrb_str_to_cstr(mrb, cert_path);
+    h2g->ctx.server.key_path = mrb_str_to_cstr(mrb, key_path);
+
+    struct RClass *klass = mrb_class_ptr(self);
+    assert(klass != NULL);
+    mrb_value obj = mrb_obj_new(mrb, klass, 0, NULL);
+    mrb_data_init(obj, h2g, &h2get_mruby_type);
+
+    return obj;
+}
+
 static mrb_value h2get_mruby_connect(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
     const char *err = NULL;
+    mrb_value exc;
     h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    if (h2get_ctx_is_server(&h2g->ctx)) {
+        err = "not configured as a client";
+        goto on_error;
+    }
 
     H2GET_MRUBY_ASSERT_ARGS(1);
 
@@ -92,11 +131,110 @@ static mrb_value h2get_mruby_connect(mrb_state *mrb, mrb_value self)
 
     h2get_connect(&h2g->ctx, H2GET_BUFSTR(url), &err);
     if (err) {
-        mrb_value exc;
-        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
-        mrb->exc = mrb_obj_ptr(exc);
+        goto on_error;
     }
 
+    return mrb_nil_value();
+
+on_error:
+    exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+    mrb->exc = mrb_obj_ptr(exc);
+    return mrb_nil_value();
+}
+
+static mrb_value h2get_mruby_listen(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    const char *err = NULL;
+    mrb_value exc;
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    if (! h2get_ctx_is_server(&h2g->ctx)) {
+        err = "not configured as a server";
+        goto on_error;
+    }
+
+    char *url = NULL;
+    int backlog;
+    if (mrb_get_args(mrb, "z|i", &url, &backlog) < 2) {
+        backlog = 5;
+    }
+
+    if (h2get_listen(&h2g->ctx, H2GET_BUFSTR(url), backlog, &err) != 0) {
+        goto on_error;
+    }
+
+    return mrb_nil_value();
+
+on_error:
+    exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+    mrb->exc = mrb_obj_ptr(exc);
+    return mrb_nil_value();
+}
+
+static mrb_value h2get_mruby_accept(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    const char *err = NULL;
+    mrb_value exc;
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    if (! h2get_ctx_is_server(&h2g->ctx)) {
+        err = "not configured as a server";
+        goto on_error;
+    }
+
+    H2GET_MRUBY_ASSERT_ARGS(0);
+
+    if (h2get_accept(&h2g->ctx, &err) != 0) {
+        goto on_error;
+    }
+
+    const char *family;
+    in_port_t port;
+    char *path = NULL;
+    char numeric[INET6_ADDRSTRLEN] = {};
+    struct sockaddr *sa = h2g->ctx.conn.sa.sa;
+    switch (sa->sa_family) {
+        case AF_INET:
+            family = "AF_INET";
+            port = ((struct sockaddr_in *)sa)->sin_port;
+            if (inet_ntop(sa->sa_family, &((struct sockaddr_in *)sa)->sin_addr, numeric, sizeof(numeric)) == NULL) {
+                err = strerror(errno);
+                goto on_error;
+            }
+            break;
+        case AF_INET6:
+            family = "AF_INET6";
+            port = ((struct sockaddr_in6 *)sa)->sin6_port;
+            if (inet_ntop(sa->sa_family, &((struct sockaddr_in6 *)sa)->sin6_addr, numeric, sizeof(numeric)) == NULL) {
+                err = strerror(errno);
+                goto on_error;
+            }
+            break;
+        case AF_UNIX:
+            family = "AF_UNIX";
+            port = 0;
+            path = ((struct sockaddr_un *)sa)->sun_path;
+            break;
+        default:
+            return mrb_nil_value();
+    }
+    mrb_value ret = mrb_ary_new_capa(mrb, 4);
+    mrb_ary_push(mrb, ret, mrb_str_new(mrb, family, strlen(family)));
+    mrb_ary_push(mrb, ret, mrb_fixnum_value(port));
+    if (path) {
+        mrb_ary_push(mrb, ret, mrb_str_new(mrb, path, strlen(path)));
+        mrb_ary_push(mrb, ret, mrb_str_new(mrb, path, strlen(path)));
+    } else {
+        mrb_ary_push(mrb, ret, mrb_str_new(mrb, numeric, strlen(numeric)));
+        mrb_ary_push(mrb, ret, mrb_str_new(mrb, numeric, strlen(numeric)));
+    }
+    return ret;
+
+on_error:
+    exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+    mrb->exc = mrb_obj_ptr(exc);
     return mrb_nil_value();
 }
 
@@ -231,6 +369,29 @@ static mrb_value h2get_mruby_send_prefix(mrb_state *mrb, mrb_value self)
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
     ret = h2get_send_prefix(&h2g->ctx, &err);
+    if (ret < 0) {
+        mrb_value exc;
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
+    return mrb_nil_value();
+}
+
+static mrb_value h2get_mruby_expect_prefix(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby *h2g;
+    const char *err;
+    int ret;
+
+    int timeout;
+    if (mrb_get_args(mrb, "|i", &timeout) == 0) {
+        timeout = -1;
+    }
+
+    h2g = (struct h2get_mruby *)DATA_PTR(self);
+
+    ret = h2get_expect_prefix(&h2g->ctx, timeout, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -852,7 +1013,13 @@ void run_mruby(const char *rbfile, int argc, char **argv)
 
     /* H2 */
     mrb_define_method(mrb, h2get_mruby, "initialize", h2get_mruby_init, MRB_ARGS_ARG(0, 0));
+    mrb_define_class_method(mrb, h2get_mruby, "server", h2get_mruby_server_init, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "connect", h2get_mruby_connect, MRB_ARGS_ARG(1, 0));
+
+    mrb_define_method(mrb, h2get_mruby, "listen", h2get_mruby_listen, MRB_ARGS_ARG(1, 0));
+    mrb_define_method(mrb, h2get_mruby, "accept", h2get_mruby_accept, MRB_ARGS_ARG(0, 0));
+
+    mrb_define_method(mrb, h2get_mruby, "expect_prefix", h2get_mruby_expect_prefix, MRB_ARGS_ARG(0, 1));
 
     mrb_define_method(mrb, h2get_mruby, "send_prefix", h2get_mruby_send_prefix, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_settings", h2get_mruby_send_settings, MRB_ARGS_ARG(0, 1));

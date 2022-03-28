@@ -300,3 +300,18 @@ int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, 
     buf->buf = payload;
     return 0;
 }
+
+int h2get_expect_prefix(struct h2get_ctx *ctx, int timeout, const char **err)
+{
+    char buf[sizeof(H2GET_CONNECTION_PREFACE) - 1] = {};
+    *err = do_read(ctx, &H2GET_BUF(buf, sizeof(buf)), timeout);
+    if (*err != NULL) {
+        return -1;
+    }
+    if (memcmp(buf, H2GET_CONNECTION_PREFACE, sizeof(buf))) {
+        *err = "invalid prefix";
+        return -1;
+    }
+
+    return 0;
+}
