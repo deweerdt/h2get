@@ -34,9 +34,6 @@ static struct h2get_ops *h2get_ctx_get_ops(struct h2get_ctx *ctx, enum h2get_tra
     int i;
     for (i = 0; i < ctx->nr_ops; i++) {
         if (ctx->registered_ops[i].xprt == xprt) {
-            if (ctx->registered_ops[i].init) {
-                ctx->xprt_priv = ctx->registered_ops[i].init();
-            }
             return &ctx->registered_ops[i];
         }
     }
@@ -56,6 +53,8 @@ static void h2get_ctx_register_ops(struct h2get_ctx *ctx, struct h2get_ops *ops)
 void h2get_ctx_init(struct h2get_ctx *ctx)
 {
     memset(ctx, 0, sizeof(*ctx));
+    ctx->conn.fd = -1;
+    ctx->server.listener.fd = -1;
     ctx->peer_settings = default_settings;
     ctx->own_settings = default_settings;
     ctx->max_open_sid_client = 1;
@@ -69,6 +68,15 @@ void h2get_ctx_init(struct h2get_ctx *ctx)
 
     h2get_hpack_ctx_init(&ctx->own_hpack, ctx->own_settings.header_table_size);
 }
+
+bool h2get_ctx_is_server(struct h2get_ctx *ctx)
+{
+    if (ctx->server.cert_path != NULL) {
+        return true;
+    }
+    return false;
+}
+
 
 void h2get_ctx_on_settings_ack(struct h2get_ctx *ctx)
 {
@@ -257,6 +265,9 @@ void h2get_destroy(struct h2get_ctx *ctx)
     if (ctx->ops && ctx->ops->fini) {
         ctx->ops->fini(ctx->xprt_priv);
     }
+    if (ctx->server.listener.fd >= 0) {
+        close(ctx->server.listener.fd);
+    }
     free(ctx->registered_ops);
 }
 
@@ -340,6 +351,10 @@ int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **
         *err = "Transport not supported";
         return -1;
     }
+    if (ctx->ops->init) {
+        ctx->xprt_priv = ctx->ops->init(ctx, err);
+        if (*err != NULL) return -1;
+    }
 
     ctx->conn.servername = url.raw.host;
     ret = ctx->ops->connect(&ctx->conn, ctx->xprt_priv);
@@ -354,16 +369,139 @@ int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **
     return 0;
 }
 
+static int parse_url(struct h2get_buf url_buf, struct h2get_url *url, enum h2get_transport *xprt, struct h2get_conn *conn, const char **err)
+{
+    *url = h2get_buf_parse_url(url_buf);
+    if (url->parsed.parse_err) {
+        *err = url->parsed.parse_err;
+        return -1;
+    }
+
+    if (!url->raw.scheme.buf) {
+        *xprt = H2GET_TRANSPORT_SSL;
+    } else {
+        if (!h2get_buf_cmp(&url->raw.scheme, &H2GET_BUFSTR("http"))) {
+            *xprt = H2GET_TRANSPORT_PLAIN;
+        } else if (!h2get_buf_cmp(&url->raw.scheme, &H2GET_BUFSTR("https"))) {
+            *xprt = H2GET_TRANSPORT_SSL;
+        } else if (!h2get_buf_cmp(&url->raw.scheme, &H2GET_BUFSTR("unix"))) {
+            *xprt = H2GET_TRANSPORT_UNIX;
+        } else {
+            *err = "Unknown URL scheme";
+            return -1;
+        }
+    }
+    const char *default_port = NULL;
+    if (!url->parsed.port) {
+        if (*xprt == H2GET_TRANSPORT_SSL) {
+            default_port = "443";
+        } else if (*xprt == H2GET_TRANSPORT_PLAIN) {
+            default_port = "80";
+        }
+    }
+
+    if (*xprt == H2GET_TRANSPORT_PLAIN || *xprt == H2GET_TRANSPORT_SSL) {
+        struct addrinfo hints;
+        struct addrinfo *result, *rp;
+        int sfd, s;
+        const char *service = default_port ?: H2GET_TO_STR_ALLOCA(url->raw.port);
+        char *host = H2GET_TO_STR_ALLOCA(url->raw.host);
+
+        memset(&hints, 0, sizeof(struct addrinfo));
+        hints.ai_family = AF_UNSPEC;     /* Allow IPv4 or IPv6 */
+        hints.ai_socktype = SOCK_STREAM; /* Datagram socket */
+        hints.ai_flags = AI_NUMERICSERV;
+        hints.ai_protocol = 0;
+        hints.ai_canonname = NULL;
+        hints.ai_addr = NULL;
+        hints.ai_next = NULL;
+
+        s = getaddrinfo(host, service, &hints, &result);
+        if (s != 0) {
+            *err = "Cannot resolve host";
+            return -1;
+        }
+        for (rp = result; rp != NULL; rp = rp->ai_next) {
+            sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+            if (sfd == -1)
+                continue;
+            close(sfd);
+            break;
+        }
+        if (!rp) {
+            *err = "Connection failed";
+            return -1;
+        }
+        conn->protocol = rp->ai_protocol;
+        conn->socktype = rp->ai_socktype;
+        conn->sa.sa = (void *)&conn->sa.sa_storage;
+        memcpy(conn->sa.sa, rp->ai_addr, rp->ai_addrlen);
+        conn->sa.len = rp->ai_addrlen;
+
+        freeaddrinfo(result);
+    }
+
+    return 0;
+}
+
+int h2get_listen(struct h2get_ctx *ctx, struct h2get_buf url_buf, int backlog, const char **err)
+{
+    struct h2get_conn *listener = &ctx->server.listener;
+    enum h2get_transport xprt;
+    if (parse_url(url_buf, &ctx->url, &xprt, listener, err) != 0)
+        return -1;
+    ctx->url.unparsed.buf = memdup(url_buf.buf, url_buf.len);
+    ctx->url.unparsed.len = url_buf.len;
+
+    ctx->ops = h2get_ctx_get_ops(ctx, xprt);
+    if (!ctx->ops) {
+        *err = "Transport not supported";
+        return -1;
+    }
+    if (ctx->ops->init) {
+        ctx->xprt_priv = ctx->ops->init(ctx, err);
+        if (*err != NULL) return -1;
+    }
+
+    listener->fd = socket(listener->sa.sa->sa_family, listener->socktype, listener->protocol);
+    if (listener->fd < 0) {
+        *err = strerror(errno);
+        return -1;
+    }
+
+    if (bind(listener->fd, listener->sa.sa, listener->sa.len) < 0) {
+        *err = strerror(errno);
+        goto err;
+    }
+    if (listen(listener->fd, backlog) < 0) {
+        *err = strerror(errno);
+        goto err;
+    }
+    return 0;
+err:
+    close(listener->fd);
+    return -1;
+}
+
+int h2get_accept(struct h2get_ctx *ctx, const char **err)
+{
+    if (ctx->ops->accept(&ctx->server.listener, &ctx->conn, ctx->xprt_priv) < 0) {
+        *err = "Connection failed";
+        return -1;
+    }
+
+    return 0;
+}
+
 int h2get_send_prefix(struct h2get_ctx *ctx, const char **err)
 {
     int ret;
-    static char connection_preface[] = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
     if (ctx->conn.state < H2GET_CONN_STATE_CONNECT) {
         *err = "Not connected";
         return -1;
     }
-    ret = ctx->ops->write(&ctx->conn, &H2GET_BUFSTR(connection_preface), 1);
+    ret = ctx->ops->write(&ctx->conn, &H2GET_BUFSTR(H2GET_CONNECTION_PREFACE), 1);
     if (ret < 0) {
         *err = "Write failed";
         return -1;

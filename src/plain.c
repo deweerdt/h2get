@@ -29,6 +29,6 @@ static int plain_close(struct h2get_conn *conn, void *unused)
 }
 
 struct h2get_ops plain_ops = {
-    H2GET_TRANSPORT_PLAIN, NULL, plain_connect, NULL, NULL, plain_close, NULL,
+    H2GET_TRANSPORT_PLAIN, NULL, plain_connect, NULL, NULL, NULL, plain_close, NULL,
 };
 /* vim: set expandtab ts=4 sw=4: */
