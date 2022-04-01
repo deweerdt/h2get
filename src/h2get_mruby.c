@@ -711,7 +711,7 @@ static mrb_value h2get_mruby_send_goaway(mrb_state *mrb, mrb_value self)
     int ret;
     const char *err;
     mrb_int mrb_last_stream_id, mrb_error_code;
-    mrb_value mrb_add;
+    mrb_value mrb_add = mrb_nil_value();
     uint32_t last_stream_id, error_code;
     struct h2get_buf additional;
 
