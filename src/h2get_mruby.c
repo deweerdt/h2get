@@ -337,8 +337,7 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
         settings = alloca(sizeof(*settings) * settings_array_len);
         for (int i = 0; i < settings_array_len; i++) {
             mrb_value one_setting = settings_array[i];
-            mrb_check_array_type(mrb, one_setting);
-            if (RARRAY_LEN(one_setting) != 2) {
+            if (!mrb_array_p(one_setting) || RARRAY_LEN(one_setting) != 2) {
                 mrb_value exc;
                 const char *err = "Expecting an array of array pairs: [[1,2],[3,4]]";
                 exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
