@@ -169,7 +169,7 @@ err1:
     return -1;
 }
 
-static int ssl_accept(struct h2get_conn *listener, struct h2get_conn *conn)
+static int ssl_accept(struct h2get_conn *listener, struct h2get_conn *conn, int tout)
 {
     int err;
     SSL *ssl;
@@ -182,6 +182,12 @@ static int ssl_accept(struct h2get_conn *listener, struct h2get_conn *conn)
 
     if (listener->fd < 0) {
         return -1;
+    }
+
+    int r;
+    while ((r = wait_for_read(listener->fd, tout)) < 0 && errno == EINTR) {}
+    if (r == 0) {
+        return H2GET_ERROR_TIMEOUT;
     }
 
     conn->sa.len = sizeof(conn->sa.sa_storage);

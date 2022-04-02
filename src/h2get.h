@@ -264,7 +264,7 @@ struct h2get_ops {
     enum h2get_transport xprt;
     int (*init)(struct h2get_conn *, const char **);
     int (*connect)(struct h2get_conn *);
-    int (*accept)(struct h2get_conn *, struct h2get_conn *);
+    int (*accept)(struct h2get_conn *, struct h2get_conn *, int tout);
     int (*write)(struct h2get_conn *, struct h2get_buf *bufs, size_t nr_bufs);
     int (*read)(struct h2get_conn *, struct h2get_buf *buf, int tout);
     int (*close)(struct h2get_conn *);
@@ -360,7 +360,7 @@ void h2get_ctx_init(struct h2get_ctx *ctx);
 bool h2get_ctx_is_server(struct h2get_ctx *ctx);
 int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_buf url_buf, const char **err);
 int h2get_listen(struct h2get_ctx *ctx, struct h2get_buf url_buf, int backlog, const char **err);
-int h2get_accept(struct h2get_ctx *ctx, struct h2get_conn *conn, const char **err);
+int h2get_accept(struct h2get_ctx *ctx, struct h2get_conn *conn, int timeout, const char **err);
 int h2get_destroy(struct h2get_ctx *ctx, const char **err);
 
 int h2get_conn_on_settings_ack(struct h2get_conn *conn, const char **err);
@@ -398,6 +398,8 @@ void *h2get_reader_thread(void *arg);
 #define H2GET_HEADERS_SETTINGS_INITIAL_WINDOW_SIZE 0x4
 #define H2GET_HEADERS_SETTINGS_MAX_FRAME_SIZE 0x5
 #define H2GET_HEADERS_SETTINGS_MAX_HEADER_LIST_SIZE 0x6
+
+#define H2GET_ERROR_TIMEOUT -255
 
 struct h2get_ctx {
     struct h2get_ops *registered_ops;

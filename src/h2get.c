@@ -508,11 +508,11 @@ err:
     return -1;
 }
 
-int h2get_accept(struct h2get_ctx *ctx, struct h2get_conn *conn, const char **err)
+int h2get_accept(struct h2get_ctx *ctx, struct h2get_conn *conn, int timeout, const char **err)
 {
     conn_init(ctx, conn);
     int ret;
-    if ((ret = ctx->server.listener.ops->accept(&ctx->server.listener, conn)) != 0) {
+    if ((ret = ctx->server.listener.ops->accept(&ctx->server.listener, conn, timeout)) != 0) {
         *err = "accept failed";
         return ret;
     }

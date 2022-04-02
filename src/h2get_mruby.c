@@ -224,10 +224,15 @@ static mrb_value h2get_mruby_accept(mrb_state *mrb, mrb_value self)
         goto on_error;
     }
 
-    H2GET_MRUBY_ASSERT_ARGS(0);
+    int timeout = -1;;
+    mrb_get_args(mrb, "|i", &timeout);
 
     conn = (void *)mrb_malloc(mrb, sizeof(*conn));
-    if (h2get_accept(&h2g->ctx, &conn->conn, &err) != 0) {
+    int ret;
+    if ((ret = h2get_accept(&h2g->ctx, &conn->conn, timeout, &err)) != 0) {
+        if (ret == H2GET_ERROR_TIMEOUT) {
+            goto on_timeout;
+        }
         goto on_error;
     }
 
@@ -282,9 +287,10 @@ static mrb_value h2get_mruby_accept(mrb_state *mrb, mrb_value self)
     return mconn;
 
 on_error:
-    if (conn) mrb_free(mrb, conn);
     exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
     mrb->exc = mrb_obj_ptr(exc);
+on_timeout:
+    if (conn) mrb_free(mrb, conn);
     return mrb_nil_value();
 }
 
@@ -1068,7 +1074,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_class_method(mrb, h2get_mruby, "server", h2get_mruby_server_init, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "connect", h2get_mruby_connect, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "listen", h2get_mruby_listen, MRB_ARGS_ARG(1, 0));
-    mrb_define_method(mrb, h2get_mruby, "accept", h2get_mruby_accept, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby, "accept", h2get_mruby_accept, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "destroy", h2get_mruby_destroy, MRB_ARGS_ARG(1, 0));
 
     mrb_define_method(mrb, h2get_mruby_conn, "expect_prefix", h2get_mruby_conn_expect_prefix, MRB_ARGS_ARG(0, 1));
