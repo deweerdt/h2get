@@ -57,6 +57,44 @@
 
 #include <ctype.h>
 #include <stdio.h>
+
+struct list {
+    struct list *next, *prev;
+};
+
+static inline int list_empty(struct list *l)
+{
+	return l->next == l;
+}
+static inline void list_init(struct list *n)
+{
+	n->next = n;
+	n->prev = n;
+}
+
+static inline void list_del(struct list *n)
+{
+	n->next->prev = n->prev;
+	n->prev->next = n->next;
+}
+
+static inline struct list *list_tail(struct list *l)
+{
+    return l->prev;
+}
+static inline void list_add(struct list *l, struct list *n)
+{
+	n->next = l->next;
+	n->next->prev = n;
+	l->next = n;
+	n->prev = l;
+}
+
+static inline void list_add_tail(struct list *l, struct list *n)
+{
+	list_add(l->prev, n);
+}
+
 static inline void dump_line(char *data, int offset, int limit)
 {
     int i;
@@ -156,7 +194,40 @@ enum h2get_conn_state {
     H2GET_CONN_STATE_CONNECT,
 };
 
+struct h2get_ctx;
+
+struct h2get_h2_settings {
+    uint32_t header_table_size;
+    uint32_t enable_push;
+    uint32_t max_concurrent_streams;
+    uint32_t initial_window_size;
+    uint32_t max_frame_size;
+    uint32_t max_header_list_size;
+};
+
+struct h2get_hpack_ctx {
+    struct list dyn_table;
+    size_t dyn_size;
+    size_t max_dyn_size;
+};
+
+struct h2get_url {
+    struct {
+        struct h2get_buf scheme;
+        struct h2get_buf authority;
+        struct h2get_buf host;
+        struct h2get_buf port;
+        struct h2get_buf path;
+    } raw;
+    struct {
+        uint16_t port;
+        const char *parse_err;
+    } parsed;
+    struct h2get_buf unparsed;
+};
+
 struct h2get_conn {
+    struct h2get_ctx *ctx;
     int fd;
     int protocol;
     int socktype;
@@ -167,7 +238,20 @@ struct h2get_conn {
     } sa;
     enum h2get_conn_state state;
     struct h2get_buf servername;
+
+    struct h2get_h2_settings peer_settings;
+    struct h2get_h2_settings own_settings;
+    uint32_t max_open_sid_client;
+    uint32_t max_open_sid_server;
+
+    struct h2get_hpack_ctx peer_hpack;
+    struct h2get_hpack_ctx own_hpack;
+
+    struct h2get_url url;
+
+    struct h2get_ops *ops;
     void *priv;
+    void *xprt_priv;
 };
 
 enum h2get_transport {
@@ -176,16 +260,14 @@ enum h2get_transport {
     H2GET_TRANSPORT_SSL,
 };
 
-struct h2get_ctx;
 struct h2get_ops {
     enum h2get_transport xprt;
-    void *(*init)(struct h2get_ctx *, const char **);
-    int (*connect)(struct h2get_conn *, void *);
-    int (*accept)(struct h2get_conn *, struct h2get_conn *, void *);
+    int (*init)(struct h2get_conn *, const char **);
+    int (*connect)(struct h2get_conn *);
+    int (*accept)(struct h2get_conn *, struct h2get_conn *, int tout);
     int (*write)(struct h2get_conn *, struct h2get_buf *bufs, size_t nr_bufs);
     int (*read)(struct h2get_conn *, struct h2get_buf *buf, int tout);
-    int (*close)(struct h2get_conn *, void *);
-    void (*fini)(void *);
+    int (*close)(struct h2get_conn *);
 };
 
 static inline void *memdup(void *src, size_t len)
@@ -197,43 +279,6 @@ static inline void *memdup(void *src, size_t len)
 
 extern struct h2get_ops plain_ops;
 extern struct h2get_ops ssl_ops;
-
-struct list {
-    struct list *next, *prev;
-};
-
-static inline int list_empty(struct list *l)
-{
-	return l->next == l;
-}
-static inline void list_init(struct list *n)
-{
-	n->next = n;
-	n->prev = n;
-}
-
-static inline void list_del(struct list *n)
-{
-	n->next->prev = n->prev;
-	n->prev->next = n->next;
-}
-
-static inline struct list *list_tail(struct list *l)
-{
-    return l->prev;
-}
-static inline void list_add(struct list *l, struct list *n)
-{
-	n->next = l->next;
-	n->next->prev = n;
-	l->next = n;
-	n->prev = l;
-}
-
-static inline void list_add_tail(struct list *l, struct list *n)
-{
-	list_add(l->prev, n);
-}
 
 #undef offsetof
 #ifdef __compiler_offsetof
@@ -277,6 +322,7 @@ static inline void h2get_h2_priority_set_dep_stream_id(struct h2get_h2_priority 
     uint32_t excl_dep_stream_id = ntohl(prio->excl_dep_stream_id);
     excl_dep_stream_id = (excl_dep_stream_id & 0x80000000) | (dep_stream_id & 0x7fffffff);
     prio->excl_dep_stream_id = htonl(excl_dep_stream_id);
+
 }
 
 static inline uint32_t h2get_h2_priority_get_dep_stream_id(struct h2get_h2_priority *prio)
@@ -312,37 +358,37 @@ struct h2get_h2_goaway {
 struct h2get_ctx;
 void h2get_ctx_init(struct h2get_ctx *ctx);
 bool h2get_ctx_is_server(struct h2get_ctx *ctx);
-void h2get_ctx_on_settings_ack(struct h2get_ctx *ctx);
-struct h2get_h2_settings;
-int h2get_ctx_on_peer_settings(struct h2get_ctx *ctx, struct h2get_h2_header *h, char *payload, int plen);
-int h2get_connect(struct h2get_ctx *ctx, struct h2get_buf url_buf, const char **err);
+int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_buf url_buf, const char **err);
 int h2get_listen(struct h2get_ctx *ctx, struct h2get_buf url_buf, int backlog, const char **err);
-int h2get_accept(struct h2get_ctx *ctx, const char **err);
-int h2get_close(struct h2get_ctx *ctx);
-void h2get_destroy(struct h2get_ctx *ctx);
-int h2get_send_priority(struct h2get_ctx *ctx, uint32_t stream_id, struct h2get_h2_priority *prio, const char **err);
-int h2get_send_ping(struct h2get_ctx *ctx, char *payload, const char **err);
-int h2get_send_settings(struct h2get_ctx *ctx, struct h2get_h2_setting *settings, int nr_settings, const char **err);
-int h2get_send_prefix(struct h2get_ctx *ctx, const char **err);
-int h2get_send_windows_update(struct h2get_ctx *ctx, uint32_t stream_id, uint32_t increment, const char **err);
-int h2get_send_rst_stream(struct h2get_ctx *ctx, uint32_t stream_id, uint32_t error_code, int timeout, const char **err);
-int h2get_get(struct h2get_ctx *ctx, const char *path, const char **err);
-int h2get_getp(struct h2get_ctx *ctx, const char *path, uint32_t sid, struct h2get_h2_priority prio, const char **err);
-int h2get_send_data(struct h2get_ctx *ctx, struct h2get_buf data, uint32_t sid, int flags, const char **err);
-int h2get_send_headers(struct h2get_ctx *ctx, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags, struct h2get_h2_priority *prio, int is_cont, const char **err);
-int h2get_send_goaway(struct h2get_ctx *ctx, uint32_t last_stream_id, uint32_t error_code, struct h2get_buf additional, const char **err);
-int h2get_send_raw_frame(struct h2get_ctx *ctx, uint8_t type, int flags, uint32_t sid, struct h2get_buf data, const char **err);
+int h2get_accept(struct h2get_ctx *ctx, struct h2get_conn *conn, int timeout, const char **err);
+int h2get_destroy(struct h2get_ctx *ctx, const char **err);
+
+int h2get_conn_on_settings_ack(struct h2get_conn *conn, const char **err);
+int h2get_conn_on_peer_settings(struct h2get_conn *conn, struct h2get_h2_header *h, char *payload, int plen, const char **err);
+int h2get_conn_send_priority(struct h2get_conn *conn, uint32_t stream_id, struct h2get_h2_priority *prio, const char **err);
+int h2get_conn_send_ping(struct h2get_conn *conn, char *payload, const char **err);
+int h2get_conn_send_settings(struct h2get_conn *conn, struct h2get_h2_setting *settings, size_t nr_settings, const char **err);
+int h2get_conn_send_prefix(struct h2get_conn *conn, const char **err);
+int h2get_conn_send_windows_update(struct h2get_conn *conn, uint32_t stream_id, uint32_t increment, const char **err);
+int h2get_conn_send_rst_stream(struct h2get_conn *conn, uint32_t stream_id, uint32_t error_code, int timeout, const char **err);
+int h2get_conn_get(struct h2get_conn *conn, const char *path, const char **err);
+int h2get_conn_getp(struct h2get_conn *conn, const char *path, uint32_t sid, struct h2get_h2_priority prio, const char **err);
+int h2get_conn_send_data(struct h2get_conn *conn, struct h2get_buf data, uint32_t sid, int flags, const char **err);
+int h2get_conn_send_headers(struct h2get_conn *conn, struct h2get_buf *headers, size_t nr_headers, uint32_t sid, int flags, struct h2get_h2_priority *prio, int is_cont, const char **err);
+int h2get_conn_send_goaway(struct h2get_conn *conn, uint32_t last_stream_id, uint32_t error_code, struct h2get_buf additional, const char **err);
+int h2get_conn_send_raw_frame(struct h2get_conn *conn, uint8_t type, int flags, uint32_t sid, struct h2get_buf data, const char **err);
+int h2get_conn_close(struct h2get_conn *conn, const char **err);
 const char *h2get_render_error_code(uint32_t err);
 
-int h2get_send_settings_ack(struct h2get_ctx *ctx, int timeout);
-typedef void (*h2get_frame_render_t)(struct h2get_ctx *ctx, struct h2get_buf *, struct h2get_h2_header *, char *, size_t);
+int h2get_conn_send_settings_ack(struct h2get_conn *conn, int timeout);
+typedef void (*h2get_frame_render_t)(struct h2get_conn *conn, struct h2get_buf *, struct h2get_h2_header *, char *, size_t);
 h2get_frame_render_t h2get_frame_get_renderer(uint8_t type);
 const char *h2get_frame_type_to_str(uint8_t type);
 
-int h2get_expect_prefix(struct h2get_ctx *ctx, int timeout, const char **err);
+int h2get_conn_expect_prefix(struct h2get_conn *conn, int timeout, const char **err);
 
 extern const char *err_read_timeout;
-int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, struct h2get_buf *buf, int timeout, const char **err);
+int h2get_conn_read_one_frame(struct h2get_conn *conn, struct h2get_h2_header *header, struct h2get_buf *buf, int timeout, const char **err);
 
 void *h2get_reader_thread(void *arg);
 
@@ -353,53 +399,11 @@ void *h2get_reader_thread(void *arg);
 #define H2GET_HEADERS_SETTINGS_MAX_FRAME_SIZE 0x5
 #define H2GET_HEADERS_SETTINGS_MAX_HEADER_LIST_SIZE 0x6
 
-struct h2get_h2_settings {
-    uint32_t header_table_size;
-    uint32_t enable_push;
-    uint32_t max_concurrent_streams;
-    uint32_t initial_window_size;
-    uint32_t max_frame_size;
-    uint32_t max_header_list_size;
-};
-
-struct h2get_url {
-    struct {
-        struct h2get_buf scheme;
-        struct h2get_buf authority;
-        struct h2get_buf host;
-        struct h2get_buf port;
-        struct h2get_buf path;
-    } raw;
-    struct {
-        uint16_t port;
-        const char *parse_err;
-    } parsed;
-    struct h2get_buf unparsed;
-};
-
-struct h2get_hpack_ctx {
-    struct list dyn_table;
-    size_t dyn_size;
-    size_t max_dyn_size;
-};
+#define H2GET_ERROR_TIMEOUT -255
 
 struct h2get_ctx {
-    struct h2get_conn conn;
-    struct h2get_ops *ops;
-    void *xprt_priv;
-
-    struct h2get_h2_settings peer_settings;
-    struct h2get_h2_settings own_settings;
-    uint32_t max_open_sid_client;
-    uint32_t max_open_sid_server;
-
     struct h2get_ops *registered_ops;
     size_t nr_ops;
-
-    struct h2get_hpack_ctx peer_hpack;
-    struct h2get_hpack_ctx own_hpack;
-
-    struct h2get_url url;
 
     struct {
         const char *cert_path;
