@@ -1081,7 +1081,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby_conn, "send_prefix", h2get_mruby_conn_send_prefix, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_conn, "send_settings", h2get_mruby_conn_send_settings, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby_conn, "send_settings_ack", h2get_mruby_conn_send_settings_ack, MRB_ARGS_ARG(0, 0));
-    mrb_define_method(mrb, h2get_mruby_conn, "send_priority", h2get_mruby_conn_send_priority, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_priority", h2get_mruby_conn_send_priority, MRB_ARGS_ARG(4, 0));
     mrb_define_method(mrb, h2get_mruby_conn, "send_ping", h2get_mruby_conn_send_ping, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby_conn, "send_rst_stream", h2get_mruby_conn_send_rst_stream, MRB_ARGS_ARG(2, 1));
     mrb_define_method(mrb, h2get_mruby_conn, "send_window_update", h2get_mruby_conn_send_window_update, MRB_ARGS_ARG(2, 0));
