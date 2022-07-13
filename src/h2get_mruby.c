@@ -27,8 +27,9 @@ struct h2get_mruby_priority {
 
 struct h2get_mruby_frame {
     struct h2get_ctx *ctx;
-    mrb_value payload;
     struct h2get_h2_header header;
+    size_t payload_len;
+    char payload[1];
 };
 
 static char const H2GET_MRUBY_KEY[] = "$h2get_mruby_type";
@@ -266,10 +267,11 @@ static mrb_value create_frame(mrb_state *mrb, struct h2get_ctx *ctx, struct h2ge
 
     frame = mrb_obj_new(mrb, h2get_mruby_frame, 0, NULL);
 
-    h2g_frame = (struct h2get_mruby_frame *)mrb_malloc(mrb, sizeof(*h2g_frame));
+    h2g_frame = (struct h2get_mruby_frame *)mrb_malloc(mrb, offsetof(struct h2get_mruby_frame, payload) + payload->len);
     h2g_frame->ctx = ctx;
     h2g_frame->header = *header;
-    h2g_frame->payload = mrb_str_new(mrb, payload->buf, payload->len);
+    h2g_frame->payload_len = payload->len;
+    memcpy(h2g_frame->payload, payload->buf, payload->len);
 
     mrb_data_init(frame, h2g_frame, &h2get_mruby_frame_type);
 
@@ -781,8 +783,7 @@ static mrb_value h2get_mruby_on_settings(mrb_state *mrb, mrb_value self)
     mrb_get_args(mrb, "o", &frame_mrbv);
     h2g = (struct h2get_mruby *)DATA_PTR(self);
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(frame_mrbv);
-    ret = h2get_ctx_on_peer_settings(&h2g->ctx, &h2g_frame->header, RSTRING_PTR(h2g_frame->payload),
-                                     RSTRING_LEN(h2g_frame->payload));
+    ret = h2get_ctx_on_peer_settings(&h2g->ctx, &h2g_frame->header, h2g_frame->payload, h2g_frame->payload_len);
     if (ret < 0) {
         const char *err;
         mrb_value exc;
@@ -847,7 +848,7 @@ static mrb_value h2get_mruby_frame_payload(mrb_state *mrb, mrb_value self)
     struct h2get_mruby_frame *h2g_frame;
 
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
-    return mrb_str_new(mrb, RSTRING_PTR(h2g_frame->payload), RSTRING_LEN(h2g_frame->payload));
+    return mrb_str_new(mrb, h2g_frame->payload, h2g_frame->payload_len);
 }
 
 static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
@@ -859,12 +860,12 @@ static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
     mrb_value str;
 
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
-    ret = asprintf(&buf, "%s frame <length=%d, flags=0x%02x, stream_id=%" PRIu32 ">",
-                   h2get_frame_type_to_str(h2g_frame->header.type), RSTRING_LEN(h2g_frame->payload),
+    ret = asprintf(&buf, "%s frame <length=%zu, flags=0x%02x, stream_id=%" PRIu32 ">",
+                   h2get_frame_type_to_str(h2g_frame->header.type), h2g_frame->payload_len,
                    h2g_frame->header.flags, ntohl(h2g_frame->header.stream_id << 1));
     out = H2GET_BUF(buf, ret);
     h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame->ctx, &out, &h2g_frame->header,
-                                                     RSTRING_PTR(h2g_frame->payload), RSTRING_LEN(h2g_frame->payload));
+                                                     h2g_frame->payload, h2g_frame->payload_len);
 
     str = mrb_str_new(mrb, out.buf, out.len);
     free(out.buf);
@@ -924,7 +925,7 @@ static mrb_value ack_ping(mrb_state *mrb, struct h2get_mruby_frame *h2g_frame)
 {
     int ret;
     const char *err;
-    ret = h2get_send_ping(h2g_frame->ctx, RSTRING_PTR(h2g_frame->payload), &err);
+    ret = h2get_send_ping(h2g_frame->ctx, h2g_frame->payload, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -955,7 +956,7 @@ static mrb_value h2get_mruby_frame_increment(mrb_state *mrb, mrb_value self)
 
     h2g_frame = mrb_data_get_ptr(mrb, self, &h2get_mruby_frame_type);
     if (h2g_frame->header.type == H2GET_HEADERS_WINDOW_UPDATE) {
-        return mrb_fixnum_value(ntohl(*(uint32_t *)RSTRING_PTR(h2g_frame->payload)));
+        return mrb_fixnum_value(ntohl(*(uint32_t *)h2g_frame->payload));
     } else {
         mrb_raise(mrb, E_ARGUMENT_ERROR, "Frame type must be WINDOW_UPDATE");
         return mrb_nil_value();
