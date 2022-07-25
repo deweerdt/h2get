@@ -600,7 +600,7 @@ static mrb_value h2get_mruby_send_headers(mrb_state *mrb, mrb_value self)
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
     header_keys = mrb_hash_keys(mrb, headers);
-    mrb_int headers_len = mrb_ary_len(mrb, header_keys);
+    mrb_int headers_len = RARRAY_LEN(header_keys);
 
     struct h2get_buf h2_headers[headers_len * 2];
     for (int i = 0; i < headers_len; i++) {
@@ -655,7 +655,7 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
     header_keys = mrb_hash_keys(mrb, headers);
-    mrb_int headers_len = mrb_ary_len(mrb, header_keys);
+    mrb_int headers_len = RARRAY_LEN(header_keys);
 
     struct h2get_buf h2_headers[headers_len * 2];
     for (int i = 0; i < headers_len; i++) {
@@ -860,8 +860,9 @@ static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
     mrb_value str;
 
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
-    ret = asprintf(&buf, "%s frame <length=%zu, flags=0x%02x, stream_id=%" PRIu32 ">",
-                   h2get_frame_type_to_str(h2g_frame->header.type), h2g_frame->payload_len,
+
+    ret = asprintf(&buf, "%s frame <length=%d, flags=0x%02x, stream_id=%" PRIu32 ">",
+                   h2get_frame_type_to_str(h2g_frame->header.type), (int)RSTRING_LEN(h2g_frame->payload),
                    h2g_frame->header.flags, ntohl(h2g_frame->header.stream_id << 1));
     out = H2GET_BUF(buf, ret);
     h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame->ctx, &out, &h2g_frame->header,
@@ -1025,7 +1026,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby, "send_prefix", h2get_mruby_send_prefix, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby, "send_settings", h2get_mruby_send_settings, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "send_settings_ack", h2get_mruby_send_settings_ack, MRB_ARGS_ARG(0, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_priority", h2get_mruby_send_priority, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby, "send_priority", h2get_mruby_send_priority, MRB_ARGS_ARG(4, 0));
     mrb_define_method(mrb, h2get_mruby, "send_ping", h2get_mruby_send_ping, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "send_rst_stream", h2get_mruby_send_rst_stream, MRB_ARGS_ARG(2, 1));
     mrb_define_method(mrb, h2get_mruby, "send_window_update", h2get_mruby_send_window_update, MRB_ARGS_ARG(2, 0));
