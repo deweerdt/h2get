@@ -1080,15 +1080,18 @@ void run_mruby(const char *rbfile, int argc, char **argv)
         printf("Failed to open file `%s`: %s\n", rbfile, strerror(errno));
         exit(EXIT_FAILURE);
     }
-    mrb_value obj = mrb_load_file(mrb, f);
+
+    mrbc_context *cxt = mrbc_context_new(mrb);
+    mrbc_filename(mrb, cxt, rbfile);
+    mrb_load_file_cxt(mrb, f, cxt);
+    mrbc_context_free(mrb, cxt);
+
     fclose(f);
     fflush(stdout);
     fflush(stderr);
 
     if (mrb->exc) {
-        obj = mrb_funcall(mrb, mrb_obj_value(mrb->exc), "inspect", 0);
-        fwrite(RSTRING_PTR(obj), RSTRING_LEN(obj), 1, stdout);
-        putc('\n', stdout);
+        mrb_print_backtrace(mrb);
         exit(EXIT_FAILURE);
     }
 
