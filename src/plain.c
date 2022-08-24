@@ -1,7 +1,7 @@
 #include "h2get.h"
 #include <unistd.h>
 
-static int plain_connect(struct h2get_conn *conn, void *unused)
+static int plain_connect(struct h2get_conn *conn)
 {
     int ret;
     conn->fd = socket(conn->sa.sa->sa_family, conn->socktype, conn->protocol);
@@ -19,7 +19,7 @@ static int plain_connect(struct h2get_conn *conn, void *unused)
     return 0;
 }
 
-static int plain_close(struct h2get_conn *conn, void *unused)
+static int plain_close(struct h2get_conn *conn)
 {
     if (conn->state < H2GET_CONN_STATE_CONNECT) {
         return -1;
@@ -29,6 +29,6 @@ static int plain_close(struct h2get_conn *conn, void *unused)
 }
 
 struct h2get_ops plain_ops = {
-    H2GET_TRANSPORT_PLAIN, NULL, plain_connect, NULL, NULL, NULL, plain_close, NULL,
+    H2GET_TRANSPORT_PLAIN, NULL, plain_connect, NULL, NULL, NULL, plain_close,
 };
 /* vim: set expandtab ts=4 sw=4: */
