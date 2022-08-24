@@ -35,42 +35,46 @@ static __attribute__((unused)) int npn_select_h2(SSL *s, unsigned char **out, un
     return SSL_TLSEXT_ERR_OK;
 }
 
-static void *ssl_init(struct h2get_ctx *h2get_ctx, const char **err)
+static int ssl_init(struct h2get_conn *conn, const char **err)
 {
     const SSL_METHOD *method;
-    SSL_CTX *ctx;
+    SSL_CTX *ctx = NULL;
 
     SSL_library_init();
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
     OpenSSL_add_all_ciphers();
 
-    bool is_server = h2get_ctx_is_server(h2get_ctx);
+    bool is_server = h2get_ctx_is_server(conn->ctx);
     method = is_server ? SSLv23_server_method() : SSLv23_client_method();
     ctx = SSL_CTX_new(method);
     if (is_server) {
-        if (SSL_CTX_use_certificate_file(ctx, h2get_ctx->server.cert_path, SSL_FILETYPE_PEM) <= 0) {
+        if (SSL_CTX_use_certificate_file(ctx, conn->ctx->server.cert_path, SSL_FILETYPE_PEM) <= 0) {
             *err = "failed to read cert file";
-            return NULL;
+            goto err;
         }
 
-        if (SSL_CTX_use_PrivateKey_file(ctx, h2get_ctx->server.key_path, SSL_FILETYPE_PEM) <= 0 ) {
+        if (SSL_CTX_use_PrivateKey_file(ctx, conn->ctx->server.key_path, SSL_FILETYPE_PEM) <= 0 ) {
             *err = "failed to read key file";
-            return NULL;
+            goto err;
         }
         SSL_CTX_set_alpn_select_cb(ctx, on_alpn_select, NULL);
     } else {
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L || defined(LIBRESSL_VERSION_NUMBER)
         if (SSL_CTX_set_alpn_protos(ctx, h2_proto_list, sizeof(h2_proto_list))) {
             *err = "failed to setup alpn protocols";
-            return NULL;
+            goto err;
         }
 #else
         SSL_CTX_set_next_proto_select_cb(ssl_ctx, npn_select_h2, NULL);
 #endif
     }
 
-    return ctx;
+    conn->xprt_priv = ctx;
+    return 0;
+err:
+    if (ctx) SSL_CTX_free(ctx);
+    return -1;
 }
 
 static int wait_for_read(int fd, int tout)
@@ -100,12 +104,12 @@ __attribute__((unused)) static char *ssl_err(void)
     return errbuf;
 }
 
-static int ssl_connect(struct h2get_conn *conn, void *priv)
+static int ssl_connect(struct h2get_conn *conn)
 {
     int ret;
     int err;
     SSL *ssl;
-    SSL_CTX *ssl_ctx = priv;
+    SSL_CTX *ssl_ctx = conn->xprt_priv;
     long ctx_opts;
     char *servername;
 
@@ -165,16 +169,25 @@ err1:
     return -1;
 }
 
-static int ssl_accept(struct h2get_conn *listener, struct h2get_conn *conn, void *priv)
+static int ssl_accept(struct h2get_conn *listener, struct h2get_conn *conn, int tout)
 {
     int err;
     SSL *ssl;
-    SSL_CTX *ssl_ctx = priv;
+    SSL_CTX *ssl_ctx = listener->xprt_priv;
+    if (! ssl_ctx) {
+        return -1;
+    }
 
     long ctx_opts;
 
     if (listener->fd < 0) {
         return -1;
+    }
+
+    int r;
+    while ((r = wait_for_read(listener->fd, tout)) < 0 && errno == EINTR) {}
+    if (r == 0) {
+        return H2GET_ERROR_TIMEOUT;
     }
 
     conn->sa.len = sizeof(conn->sa.sa_storage);
@@ -216,6 +229,9 @@ retry_connect:
 
     conn->state = H2GET_CONN_STATE_CONNECT;
     conn->priv = ssl;
+    conn->ops = listener->ops;
+    SSL_CTX_up_ref(ssl_ctx);
+    conn->xprt_priv = ssl_ctx;
     return 0;
 err2:
     SSL_free(ssl);
@@ -263,25 +279,29 @@ static int ssl_read(struct h2get_conn *conn, struct h2get_buf *buf, int tout)
     return ret;
 }
 
-static int ssl_close(struct h2get_conn *conn, void *priv)
+static int ssl_close(struct h2get_conn *conn)
 {
     if (conn->state < H2GET_CONN_STATE_CONNECT) {
         return -1;
     }
     conn->state = H2GET_CONN_STATE_INIT;
-    SSL_shutdown(priv);
-    SSL_free(priv);
-    return close(conn->fd);
-}
+    if (conn->priv) {
+        // client
+        SSL_shutdown(conn->priv);
+        SSL_free(conn->priv);
+    } else {
+        // listener
+    }
+    SSL_CTX_free(conn->xprt_priv);
 
-static void ssl_fini(void *priv)
-{
-    SSL_CTX_free(priv);
-    EVP_cleanup();
-    return;
+    int ret;
+    if ((ret = close(conn->fd)) == 0) {
+        conn->fd = -1;
+    }
+    return ret;
 }
 
 struct h2get_ops ssl_ops = {
-    H2GET_TRANSPORT_SSL, ssl_init, ssl_connect, ssl_accept, ssl_write, ssl_read, ssl_close, ssl_fini,
+    H2GET_TRANSPORT_SSL, ssl_init, ssl_connect, ssl_accept, ssl_write, ssl_read, ssl_close,
 };
 /* vim: set expandtab ts=4 sw=4: */

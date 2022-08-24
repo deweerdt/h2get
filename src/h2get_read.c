@@ -37,7 +37,7 @@ static char *h2get_header_to_txt[] = {
 };
 
 #define RENDERER(name)                                                                                                 \
-    static void h2get_frame_render_##name(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,     \
+    static void h2get_frame_render_##name(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,     \
                                           char *p, size_t plen)                                                        \
     {                                                                                                                  \
         h2get_buf_printf(out, "\n%s", "h2get_frame_" #name "_render");                                                 \
@@ -55,7 +55,7 @@ RENDERER(continuation)
 #define H2GET_HEADERS_HEADERS_PADDED 0x8
 #define H2GET_HEADERS_HEADERS_PRIORITY 0x20
 
-static void h2get_frame_render_headers(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+static void h2get_frame_render_headers(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
                                        char *payload, size_t plen)
 {
     struct list headers, *cur, *next;
@@ -84,7 +84,7 @@ static void h2get_frame_render_headers(struct h2get_ctx *ctx, struct h2get_buf *
 
     list_init(&headers);
 
-    ret = h2get_hpack_decode(&ctx->own_hpack, payload, plen, &headers);
+    ret = h2get_hpack_decode(&conn->own_hpack, payload, plen, &headers);
     if (ret < 0) {
         h2get_buf_printf(out, "\nError decoding headers");
         return;
@@ -109,33 +109,33 @@ static void h2get_frame_render_headers(struct h2get_ctx *ctx, struct h2get_buf *
     return;
 }
 
-static void h2get_frame_render_window_update(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+static void h2get_frame_render_window_update(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
                                              char *payload, size_t plen)
 {
     h2get_buf_printf(out, "\n\tincrement => %lu", ntohl(*(uint32_t *)payload) >> 1);
     return;
 }
 
-static void h2get_frame_render_data(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+static void h2get_frame_render_data(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
                                     char *payload, size_t plen)
 {
     dump_zone(payload, plen);
 }
 
-static void h2get_frame_render_unknown(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+static void h2get_frame_render_unknown(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
                                        char *payload, size_t plen)
 {
     h2get_buf_write(out, H2GET_BUF(payload, plen));
 }
 
-static void h2get_frame_render_rst_stream(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+static void h2get_frame_render_rst_stream(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
                                           char *payload, size_t plen)
 {
     h2get_buf_printf(out, "\n\terror_code => %lu", ntohl(*(uint32_t *)payload));
     return;
 }
 
-static void h2get_frame_render_goaway(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+static void h2get_frame_render_goaway(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
                                       char *payload, size_t plen)
 {
     struct h2get_h2_goaway *f = (struct h2get_h2_goaway *)payload;
@@ -146,7 +146,7 @@ static void h2get_frame_render_goaway(struct h2get_ctx *ctx, struct h2get_buf *o
     }
 }
 
-static void h2get_frame_render_settings(struct h2get_ctx *ctx, struct h2get_buf *out, struct h2get_h2_header *h,
+static void h2get_frame_render_settings(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
                                         char *payload, size_t plen)
 {
     struct h2get_h2_setting *settings;
@@ -231,9 +231,9 @@ static struct h2get_h2_header h2get_h2_settings_ack = {
     0, H2GET_HEADERS_SETTINGS, H2GET_HEADERS_SETTINGS_FLAGS_ACK, 0, 0,
 };
 
-int h2get_send_settings_ack(struct h2get_ctx *ctx, int timeout)
+int h2get_conn_send_settings_ack(struct h2get_conn *conn, int timeout)
 {
-    return ctx->ops->write(&ctx->conn, &H2GET_BUF(&h2get_h2_settings_ack, sizeof(h2get_h2_settings_ack)), timeout);
+    return conn->ops->write(conn, &H2GET_BUF(&h2get_h2_settings_ack, sizeof(h2get_h2_settings_ack)), timeout);
 }
 
 const char *h2get_frame_type_to_str(uint8_t type)
@@ -252,11 +252,11 @@ static unsigned int len24_toh(unsigned int be_24_bits_len)
     return ntohl(be_24_bits_len & 0xffffff00);
 }
 
-static const char *do_read(struct h2get_ctx *ctx, struct h2get_buf *buf, int timeout)
+static const char *do_read(struct h2get_conn *conn, struct h2get_buf *buf, int timeout)
 {
     int ret;
     do {
-        ret = ctx->ops->read(&ctx->conn, buf, timeout);
+        ret = conn->ops->read(conn, buf, timeout);
         if (ret <= 0) {
             if (!ret) {
                 return err_read_timeout;
@@ -272,13 +272,13 @@ static const char *do_read(struct h2get_ctx *ctx, struct h2get_buf *buf, int tim
 }
 
 const char *err_read_timeout = "read failed: timeout";
-int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, struct h2get_buf *buf, int timeout,
+int h2get_conn_read_one_frame(struct h2get_conn *conn, struct h2get_h2_header *header, struct h2get_buf *buf, int timeout,
                          const char **err)
 {
     int plen;
     char *payload = NULL;
 
-    *err = do_read(ctx, &H2GET_BUF(header, sizeof(*header)), timeout);
+    *err = do_read(conn, &H2GET_BUF(header, sizeof(*header)), timeout);
     if (*err != NULL) {
         return -1;
     }
@@ -290,7 +290,7 @@ int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, 
         return 0;
     }
     payload = malloc(plen);
-    *err = do_read(ctx, &H2GET_BUF(payload, plen), timeout);
+    *err = do_read(conn, &H2GET_BUF(payload, plen), timeout);
     if (*err != NULL) {
         free(payload);
         return -1;
@@ -301,10 +301,14 @@ int h2get_read_one_frame(struct h2get_ctx *ctx, struct h2get_h2_header *header, 
     return 0;
 }
 
-int h2get_expect_prefix(struct h2get_ctx *ctx, int timeout, const char **err)
+int h2get_conn_expect_prefix(struct h2get_conn *conn, int timeout, const char **err)
 {
+    if (conn->fd < 0) {
+        *err = "connection already closed";
+        return -1;
+    }
     char buf[sizeof(H2GET_CONNECTION_PREFACE) - 1] = {};
-    *err = do_read(ctx, &H2GET_BUF(buf, sizeof(buf)), timeout);
+    *err = do_read(conn, &H2GET_BUF(buf, sizeof(buf)), timeout);
     if (*err != NULL) {
         return -1;
     }

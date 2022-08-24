@@ -16,6 +16,9 @@
 #include "mruby/error.h"
 #include "mruby/hash.h"
 #include "mruby/string.h"
+#include "mruby/variable.h"
+
+#include "embedded.c.h"
 
 struct h2get_mruby {
     struct h2get_ctx ctx;
@@ -26,18 +29,34 @@ struct h2get_mruby_priority {
 };
 
 struct h2get_mruby_frame {
-    struct h2get_ctx *ctx;
+    struct h2get_conn *conn;
     struct h2get_h2_header header;
     size_t payload_len;
     char payload[1];
 };
 
+struct h2get_mruby_conn {
+    struct h2get_conn conn;
+};
+
 static char const H2GET_MRUBY_KEY[] = "$h2get_mruby_type";
 static char const H2GET_MRUBY_FRAME_KEY[] = "$h2get_mruby_frame_type";
 static char const H2GET_MRUBY_PRIORITY_KEY[] = "$h2get_mruby_priority_type";
+static char const H2GET_MRUBY_CONN_KEY[] = "$h2get_mruby_conn_type";
 
+static void on_gc_dispose(mrb_state *mrb, void *_h2g)
+{
+    struct h2get_mruby *h2g = _h2g;
+    if (h2g == NULL)
+        return;
+    const char *err;
+    if (h2get_destroy(&h2g->ctx, &err) != 0) {
+        fprintf(stderr, "failed to destroy the context: %s\n", err);
+    }
+    mrb_free(mrb, h2g);
+}
 static const struct mrb_data_type h2get_mruby_type = {
-    H2GET_MRUBY_KEY, mrb_free,
+    H2GET_MRUBY_KEY, on_gc_dispose,
 };
 
 static const struct mrb_data_type h2get_mruby_frame_type = {
@@ -48,8 +67,26 @@ static const struct mrb_data_type h2get_mruby_priority_type = {
     H2GET_MRUBY_PRIORITY_KEY, mrb_free,
 };
 
+static void on_gc_dispose_conn(mrb_state *mrb, void *_conn)
+{
+    struct h2get_mruby_conn *conn = _conn;
+    if (conn == NULL)
+        return;
+
+    const char *err;
+    if (h2get_conn_close(&conn->conn, &err) != 0) {
+        fprintf(stderr, "failed to close the connection: %s\n", err);
+    }
+
+    mrb_free(mrb, conn);
+}
+static const struct mrb_data_type h2get_mruby_conn_type = {
+    H2GET_MRUBY_CONN_KEY, on_gc_dispose_conn,
+};
+
 static struct RClass *h2get_mruby_frame;
 static struct RClass *h2get_mruby_priority;
+static struct RClass *h2get_mruby_conn;
 
 #define H2GET_MRUBY_ASSERT_ARGS(expected_argc_)                                                                        \
     do {                                                                                                               \
@@ -73,9 +110,7 @@ static mrb_value h2get_mruby_init(mrb_state *mrb, mrb_value self)
     H2GET_MRUBY_ASSERT_ARGS(0);
 
     h2g = (struct h2get_mruby *)mrb_malloc(mrb, sizeof(*h2g));
-
     h2get_ctx_init(&h2g->ctx);
-
     mrb_data_init(self, h2g, &h2get_mruby_type);
 
     return self;
@@ -90,33 +125,31 @@ static mrb_value h2get_mruby_server_init(mrb_state *mrb, mrb_value self)
     mrb_get_args(mrb, "H", &opts);
     mrb_value cert_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "cert_path"));
     if (mrb_nil_p(cert_path)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "cert_path is missing"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "cert_path is missing"));
         return mrb_nil_value();
     }
     mrb_value key_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "key_path"));
     if (mrb_nil_p(key_path)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "key_path is missing"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "key_path is missing"));
         return mrb_nil_value();
     }
 
-    h2g = (struct h2get_mruby *)mrb_malloc(mrb, sizeof(*h2g));
+    struct RClass *klass = mrb_class_ptr(self);
+    assert(klass != NULL);
+    mrb_value mh2g = mrb_obj_new(mrb, klass, 0, NULL);
+    h2g = (struct h2get_mruby *)DATA_PTR(mh2g);
 
-    h2get_ctx_init(&h2g->ctx);
     h2g->ctx.server.cert_path = mrb_str_to_cstr(mrb, cert_path);
     h2g->ctx.server.key_path = mrb_str_to_cstr(mrb, key_path);
 
-    struct RClass *klass = mrb_class_ptr(self);
-    assert(klass != NULL);
-    mrb_value obj = mrb_obj_new(mrb, klass, 0, NULL);
-    mrb_data_init(obj, h2g, &h2get_mruby_type);
-
-    return obj;
+    return mh2g;
 }
 
 static mrb_value h2get_mruby_connect(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
     const char *err = NULL;
+    struct h2get_mruby_conn *conn = NULL;
     mrb_value exc;
     h2g = (struct h2get_mruby *)DATA_PTR(self);
 
@@ -130,14 +163,20 @@ static mrb_value h2get_mruby_connect(mrb_state *mrb, mrb_value self)
     char *url = NULL;
     mrb_get_args(mrb, "z", &url);
 
-    h2get_connect(&h2g->ctx, H2GET_BUFSTR(url), &err);
-    if (err) {
+    conn = (void *)mrb_malloc(mrb, sizeof(*conn));
+    if (h2get_connect(&h2g->ctx, &conn->conn, H2GET_BUFSTR(url), &err) != 0) {
         goto on_error;
     }
 
-    return mrb_nil_value();
+    mrb_value mconn = mrb_obj_new(mrb, h2get_mruby_conn, 0, NULL);
+    mrb_data_init(mconn, conn, &h2get_mruby_conn_type);
+    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@current_conn"), mconn);
+    mrb_iv_set(mrb, mconn, mrb_intern_lit(mrb, "@h2g"), self);
+
+    return mconn;
 
 on_error:
+    if (conn) mrb_free(mrb, conn);
     exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
     mrb->exc = mrb_obj_ptr(exc);
     return mrb_nil_value();
@@ -176,6 +215,7 @@ on_error:
 static mrb_value h2get_mruby_accept(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
+    struct h2get_mruby_conn *conn = NULL;
     const char *err = NULL;
     mrb_value exc;
     h2g = (struct h2get_mruby *)DATA_PTR(self);
@@ -185,17 +225,26 @@ static mrb_value h2get_mruby_accept(mrb_state *mrb, mrb_value self)
         goto on_error;
     }
 
-    H2GET_MRUBY_ASSERT_ARGS(0);
+    int timeout = -1;;
+    mrb_get_args(mrb, "|i", &timeout);
 
-    if (h2get_accept(&h2g->ctx, &err) != 0) {
+    conn = (void *)mrb_malloc(mrb, sizeof(*conn));
+    int ret;
+    if ((ret = h2get_accept(&h2g->ctx, &conn->conn, timeout, &err)) != 0) {
+        if (ret == H2GET_ERROR_TIMEOUT) {
+            goto on_timeout;
+        }
         goto on_error;
     }
+
+    mrb_value mconn = mrb_obj_new(mrb, h2get_mruby_conn, 0, NULL);
+    mrb_data_init(mconn, conn, &h2get_mruby_conn_type);
 
     const char *family;
     in_port_t port;
     char *path = NULL;
     char numeric[INET6_ADDRSTRLEN] = {};
-    struct sockaddr *sa = h2g->ctx.conn.sa.sa;
+    struct sockaddr *sa = conn->conn.sa.sa;
     switch (sa->sa_family) {
         case AF_INET:
             family = "AF_INET";
@@ -221,45 +270,43 @@ static mrb_value h2get_mruby_accept(mrb_state *mrb, mrb_value self)
         default:
             return mrb_nil_value();
     }
-    mrb_value ret = mrb_ary_new_capa(mrb, 4);
-    mrb_ary_push(mrb, ret, mrb_str_new(mrb, family, strlen(family)));
-    mrb_ary_push(mrb, ret, mrb_fixnum_value(port));
+    mrb_value addr = mrb_ary_new_capa(mrb, 4);
+    mrb_ary_push(mrb, addr, mrb_str_new(mrb, family, strlen(family)));
+    mrb_ary_push(mrb, addr, mrb_fixnum_value(port));
     if (path) {
-        mrb_ary_push(mrb, ret, mrb_str_new(mrb, path, strlen(path)));
-        mrb_ary_push(mrb, ret, mrb_str_new(mrb, path, strlen(path)));
+        mrb_ary_push(mrb, addr, mrb_str_new(mrb, path, strlen(path)));
+        mrb_ary_push(mrb, addr, mrb_str_new(mrb, path, strlen(path)));
     } else {
-        mrb_ary_push(mrb, ret, mrb_str_new(mrb, numeric, strlen(numeric)));
-        mrb_ary_push(mrb, ret, mrb_str_new(mrb, numeric, strlen(numeric)));
+        mrb_ary_push(mrb, addr, mrb_str_new(mrb, numeric, strlen(numeric)));
+        mrb_ary_push(mrb, addr, mrb_str_new(mrb, numeric, strlen(numeric)));
     }
-    return ret;
+    mrb_iv_set(mrb, mconn, mrb_intern_lit(mrb, "@addr"), addr);
+    mrb_iv_set(mrb, mconn, mrb_intern_lit(mrb, "@h2g"), self);
+
+    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@current_conn"), mconn);
+
+    return mconn;
 
 on_error:
     exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
     mrb->exc = mrb_obj_ptr(exc);
+on_timeout:
+    if (conn) mrb_free(mrb, conn);
     return mrb_nil_value();
 }
 
 static mrb_value h2get_mruby_destroy(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    // noop: just left for backward compatibility
 
-    h2get_destroy(&h2g->ctx);
-
-    return mrb_nil_value();
-}
-
-static mrb_value h2get_mruby_close(mrb_state *mrb, mrb_value self)
-{
-    struct h2get_mruby *h2g;
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
-
-    h2get_close(&h2g->ctx);
+    // struct h2get_mruby *h2g;
+    // h2g = (struct h2get_mruby *)DATA_PTR(self);
+    // h2get_destroy(&h2g->ctx);
 
     return mrb_nil_value();
 }
 
-static mrb_value create_frame(mrb_state *mrb, struct h2get_ctx *ctx, struct h2get_h2_header *header,
+static mrb_value create_frame(mrb_state *mrb, struct h2get_conn *conn, struct h2get_h2_header *header,
                               struct h2get_buf *payload)
 {
     struct h2get_mruby_frame *h2g_frame;
@@ -268,7 +315,7 @@ static mrb_value create_frame(mrb_state *mrb, struct h2get_ctx *ctx, struct h2ge
     frame = mrb_obj_new(mrb, h2get_mruby_frame, 0, NULL);
 
     h2g_frame = (struct h2get_mruby_frame *)mrb_malloc(mrb, offsetof(struct h2get_mruby_frame, payload) + payload->len);
-    h2g_frame->ctx = ctx;
+    h2g_frame->conn = conn;
     h2g_frame->header = *header;
     h2g_frame->payload_len = payload->len;
     memcpy(h2g_frame->payload, payload->buf, payload->len);
@@ -278,10 +325,9 @@ static mrb_value create_frame(mrb_state *mrb, struct h2get_ctx *ctx, struct h2ge
     return frame;
 }
 
-static mrb_value h2get_mruby_read(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_read(mrb_state *mrb, mrb_value self)
 {
     int ret;
-    struct h2get_mruby *h2g;
     struct h2get_h2_header header;
     struct h2get_buf payload;
     int timeout;
@@ -300,9 +346,9 @@ static mrb_value h2get_mruby_read(mrb_state *mrb, mrb_value self)
         mrb_get_args(mrb, "i", &timeout);
     }
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_read_one_frame(&h2g->ctx, &header, &payload, timeout, &err);
+    ret = h2get_conn_read_one_frame(conn, &header, &payload, timeout, &err);
     if (ret < 0) {
         mrb_value exc;
 
@@ -314,16 +360,15 @@ static mrb_value h2get_mruby_read(mrb_state *mrb, mrb_value self)
 
         return mrb_nil_value();
     }
-    frame = create_frame(mrb, &h2g->ctx, &header, &payload);
+    frame = create_frame(mrb, conn, &header, &payload);
 
     free(payload.buf);
 
     return frame;
 }
 
-static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_settings(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     int ret;
     struct h2get_h2_setting *settings = NULL;
@@ -331,7 +376,7 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
     mrb_value *settings_array = NULL;
     mrb_int settings_array_len = 0;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
     ret = mrb_get_args(mrb, "|a!", &settings_array, &settings_array_len);
 
@@ -339,8 +384,7 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
         settings = alloca(sizeof(*settings) * settings_array_len);
         for (int i = 0; i < settings_array_len; i++) {
             mrb_value one_setting = settings_array[i];
-            mrb_check_array_type(mrb, one_setting);
-            if (RARRAY_LEN(one_setting) != 2) {
+            if (!mrb_array_p(one_setting) || RARRAY_LEN(one_setting) != 2) {
                 mrb_value exc;
                 const char *err = "Expecting an array of array pairs: [[1,2],[3,4]]";
                 exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -352,7 +396,8 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
         }
     }
     nr_settings = settings_array_len;
-    ret = h2get_send_settings(&h2g->ctx, settings, nr_settings, &err);
+    assert(nr_settings >= 0);
+    ret = h2get_conn_send_settings(conn, settings, (size_t)nr_settings, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -362,15 +407,14 @@ static mrb_value h2get_mruby_send_settings(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_prefix(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_prefix(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     int ret;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_prefix(&h2g->ctx, &err);
+    ret = h2get_conn_send_prefix(conn, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -380,9 +424,8 @@ static mrb_value h2get_mruby_send_prefix(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_expect_prefix(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_expect_prefix(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     int ret;
 
@@ -391,9 +434,9 @@ static mrb_value h2get_mruby_expect_prefix(mrb_state *mrb, mrb_value self)
         timeout = -1;
     }
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_expect_prefix(&h2g->ctx, timeout, &err);
+    ret = h2get_conn_expect_prefix(conn, timeout, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -403,10 +446,9 @@ static mrb_value h2get_mruby_expect_prefix(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_rst_stream(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_rst_stream(mrb_state *mrb, mrb_value self)
 {
     int ret;
-    struct h2get_mruby *h2g;
     int timeout;
     uint32_t stream_id, error_code;
     const char *err;
@@ -432,9 +474,9 @@ static mrb_value h2get_mruby_send_rst_stream(mrb_state *mrb, mrb_value self)
         break;
     }
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_rst_stream(&h2g->ctx, stream_id, error_code, timeout, &err);
+    ret = h2get_conn_send_rst_stream(conn, stream_id, error_code, timeout, &err);
     if (ret < 0) {
         mrb_value exc;
 
@@ -448,9 +490,8 @@ static mrb_value h2get_mruby_send_rst_stream(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_ping(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_ping(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     int ret;
     mrb_value *argv;
@@ -458,7 +499,7 @@ static mrb_value h2get_mruby_send_ping(mrb_state *mrb, mrb_value self)
     int iargc;
     char *payload;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
     mrb_get_args(mrb, "*", &argv, &argc);
 
@@ -468,7 +509,7 @@ static mrb_value h2get_mruby_send_ping(mrb_state *mrb, mrb_value self)
     } else {
         mrb_get_args(mrb, "s", &payload);
     }
-    ret = h2get_send_ping(&h2g->ctx, NULL, &err);
+    ret = h2get_conn_send_ping(conn, NULL, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -478,9 +519,8 @@ static mrb_value h2get_mruby_send_ping(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_priority(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_priority(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     int ret;
     mrb_int mrb_stream_id, mrb_dep_stream_id, mrb_exclusive, mrb_weight;
@@ -493,9 +533,9 @@ static mrb_value h2get_mruby_send_priority(mrb_state *mrb, mrb_value self)
     h2get_h2_priority_set_dep_stream_id(&prio, mrb_dep_stream_id);
     prio.weight = (uint8_t)mrb_weight;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_priority(&h2g->ctx, stream_id, &prio, &err);
+    ret = h2get_conn_send_priority(conn, stream_id, &prio, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -505,20 +545,19 @@ static mrb_value h2get_mruby_send_priority(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_get(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_get(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     int ret;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
     H2GET_MRUBY_ASSERT_ARGS(1);
 
     char *path = NULL;
     mrb_get_args(mrb, "z", &path);
 
-    ret = h2get_get(&h2g->ctx, path, &err);
+    ret = h2get_conn_get(conn, path, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -528,9 +567,8 @@ static mrb_value h2get_mruby_get(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_getp(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_getp(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     struct h2get_mruby_priority *h2p;
     const char *err;
     int ret;
@@ -538,7 +576,7 @@ static mrb_value h2get_mruby_getp(mrb_state *mrb, mrb_value self)
     mrb_value mrb_prio;
     mrb_value exc;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
     H2GET_MRUBY_ASSERT_ARGS(3);
 
@@ -546,7 +584,7 @@ static mrb_value h2get_mruby_getp(mrb_state *mrb, mrb_value self)
     ret = mrb_get_args(mrb, "zio", &path, &mrb_stream_id, &mrb_prio);
 
     h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
-    ret = h2get_getp(&h2g->ctx, path, (uint32_t)mrb_stream_id, h2p->prio, &err);
+    ret = h2get_conn_getp(conn, path, (uint32_t)mrb_stream_id, h2p->prio, &err);
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
         mrb->exc = mrb_obj_ptr(exc);
@@ -555,9 +593,8 @@ static mrb_value h2get_mruby_getp(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_data(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_data(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     char *data_str = NULL;
     int ret, data_len = 0;
@@ -565,9 +602,9 @@ static mrb_value h2get_mruby_send_data(mrb_state *mrb, mrb_value self)
 
     mrb_get_args(mrb, "i|is", &mrb_stream_id, &mrb_flags, &data_str, &data_len);
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_data(&h2g->ctx, H2GET_BUF(data_str, data_len), mrb_stream_id, mrb_flags, &err);
+    ret = h2get_conn_send_data(conn, H2GET_BUF(data_str, data_len), mrb_stream_id, mrb_flags, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -577,9 +614,8 @@ static mrb_value h2get_mruby_send_data(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_headers(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_headers(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     struct h2get_mruby_priority *h2p;
     const char *err;
     int ret, has_prio = 0, has_flags = 0;
@@ -597,7 +633,7 @@ static mrb_value h2get_mruby_send_headers(mrb_state *mrb, mrb_value self)
     if (ret > 3)
         has_prio = 1;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
     header_keys = mrb_hash_keys(mrb, headers);
     mrb_int headers_len = RARRAY_LEN(header_keys);
@@ -621,10 +657,10 @@ static mrb_value h2get_mruby_send_headers(mrb_state *mrb, mrb_value self)
     }
     if (has_prio) {
         h2p = mrb_data_get_ptr(mrb, mrb_prio, &h2get_mruby_priority_type);
-        ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags,
+        ret = h2get_conn_send_headers(conn, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags,
                                  &h2p->prio, 0, &err);
     } else {
-        ret = h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0,
+        ret = h2get_conn_send_headers(conn, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 0,
                                  &err);
     }
     if (ret < 0) {
@@ -635,9 +671,8 @@ static mrb_value h2get_mruby_send_headers(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_continuation(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     int ret, has_flags = 0;
     mrb_int mrb_stream_id, mrb_flags;
@@ -652,7 +687,7 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
     if (ret > 2)
         has_flags = 1;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
     header_keys = mrb_hash_keys(mrb, headers);
     mrb_int headers_len = RARRAY_LEN(header_keys);
@@ -675,7 +710,7 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
         mrb_flags = H2GET_HEADERS_HEADERS_FLAG_END_HEADERS;
     }
     ret =
-        h2get_send_headers(&h2g->ctx, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 1, &err);
+        h2get_conn_send_headers(conn, h2_headers, headers_len, (uint32_t)mrb_stream_id, (int)mrb_flags, NULL, 1, &err);
     if (ret < 0) {
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
         mrb->exc = mrb_obj_ptr(exc);
@@ -684,9 +719,8 @@ static mrb_value h2get_mruby_send_continuation(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_window_update(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_window_update(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     int ret;
     const char *err;
     mrb_int mrb_stream_id, mrb_increment;
@@ -696,9 +730,9 @@ static mrb_value h2get_mruby_send_window_update(mrb_state *mrb, mrb_value self)
     stream_id = (uint32_t)mrb_stream_id;
     increment = (uint32_t)mrb_increment;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_windows_update(&h2g->ctx, stream_id, increment, &err);
+    ret = h2get_conn_send_windows_update(conn, stream_id, increment, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -708,13 +742,12 @@ static mrb_value h2get_mruby_send_window_update(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_goaway(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_goaway(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     int ret;
     const char *err;
     mrb_int mrb_last_stream_id, mrb_error_code;
-    mrb_value mrb_add;
+    mrb_value mrb_add = mrb_nil_value();
     uint32_t last_stream_id, error_code;
     struct h2get_buf additional;
 
@@ -723,9 +756,9 @@ static mrb_value h2get_mruby_send_goaway(mrb_state *mrb, mrb_value self)
     error_code = (uint32_t)mrb_error_code;
     additional = mrb_nil_p(mrb_add) ? H2GET_BUF_NULL : H2GET_BUF(RSTRING_PTR(mrb_add), RSTRING_LEN(mrb_add));
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_goaway(&h2g->ctx, last_stream_id, error_code, additional, &err);
+    ret = h2get_conn_send_goaway(conn, last_stream_id, error_code, additional, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -735,14 +768,13 @@ static mrb_value h2get_mruby_send_goaway(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_settings_ack(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_settings_ack(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     int ret;
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_settings_ack(&h2g->ctx, 1);
+    ret = h2get_conn_send_settings_ack(conn, 1);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, strerror(errno), strlen(strerror(errno)));
@@ -752,9 +784,8 @@ static mrb_value h2get_mruby_send_settings_ack(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value h2get_mruby_send_raw_frame(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_send_raw_frame(mrb_state *mrb, mrb_value self)
 {
-    struct h2get_mruby *h2g;
     const char *err;
     char *data_str = NULL;
     int ret, data_len = 0;
@@ -762,9 +793,9 @@ static mrb_value h2get_mruby_send_raw_frame(mrb_state *mrb, mrb_value self)
 
     mrb_get_args(mrb, "ii|is", &mrb_stream_id, &mrb_type, &mrb_flags, &data_str, &data_len);
 
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
-    ret = h2get_send_raw_frame(&h2g->ctx, mrb_type, mrb_flags, mrb_stream_id, H2GET_BUF(data_str, data_len), &err);
+    ret = h2get_conn_send_raw_frame(conn, mrb_type, mrb_flags, mrb_stream_id, H2GET_BUF(data_str, data_len), &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -773,24 +804,42 @@ static mrb_value h2get_mruby_send_raw_frame(mrb_state *mrb, mrb_value self)
 
     return mrb_nil_value();
 }
-static mrb_value h2get_mruby_on_settings(mrb_state *mrb, mrb_value self)
+static mrb_value h2get_mruby_conn_on_settings(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby_frame *h2g_frame;
-    struct h2get_mruby *h2g;
     mrb_value frame_mrbv;
     int ret;
 
     mrb_get_args(mrb, "o", &frame_mrbv);
-    h2g = (struct h2get_mruby *)DATA_PTR(self);
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(frame_mrbv);
-    ret = h2get_ctx_on_peer_settings(&h2g->ctx, &h2g_frame->header, h2g_frame->payload, h2g_frame->payload_len);
+    const char *err;
+    ret = h2get_conn_on_peer_settings(conn, &h2g_frame->header, h2g_frame->payload, h2g_frame->payload_len, &err);
     if (ret < 0) {
-        const char *err;
+        if (!err) {
+            err = h2get_render_error_code(-ret);
+        }
         mrb_value exc;
-        err = h2get_render_error_code(-ret);
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
         mrb->exc = mrb_obj_ptr(exc);
     }
+    return mrb_nil_value();
+}
+
+static mrb_value h2get_mruby_conn_close(mrb_state *mrb, mrb_value self)
+{
+    int ret;
+
+    struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
+
+    const char *err;
+    ret = h2get_conn_close(conn, &err);
+    if (ret < 0) {
+        mrb_value exc;
+        exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
+        mrb->exc = mrb_obj_ptr(exc);
+    }
+
     return mrb_nil_value();
 }
 
@@ -865,7 +914,7 @@ static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
                    h2get_frame_type_to_str(h2g_frame->header.type), (int)h2g_frame->payload_len,
                    h2g_frame->header.flags, ntohl(h2g_frame->header.stream_id << 1));
     out = H2GET_BUF(buf, ret);
-    h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame->ctx, &out, &h2g_frame->header,
+    h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame->conn, &out, &h2g_frame->header,
                                                      h2g_frame->payload, h2g_frame->payload_len);
 
     str = mrb_str_new(mrb, out.buf, out.len);
@@ -908,11 +957,11 @@ static mrb_value h2get_mruby_frame_is_end_stream(mrb_state *mrb, mrb_value self)
     return mrb_bool_value(h2g_frame->header.flags & H2GET_HEADERS_HEADERS_FLAG_END_STREAM);
 }
 
-static mrb_value ack_settings(mrb_state *mrb, struct h2get_ctx *ctx)
+static mrb_value ack_settings(mrb_state *mrb, struct h2get_conn *conn)
 {
     int ret;
 
-    ret = h2get_send_settings_ack(ctx, 1);
+    ret = h2get_conn_send_settings_ack(conn, 1);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, strerror(errno), strlen(strerror(errno)));
@@ -926,7 +975,7 @@ static mrb_value ack_ping(mrb_state *mrb, struct h2get_mruby_frame *h2g_frame)
 {
     int ret;
     const char *err;
-    ret = h2get_send_ping(h2g_frame->ctx, h2g_frame->payload, &err);
+    ret = h2get_conn_send_ping(h2g_frame->conn, h2g_frame->payload, &err);
     if (ret < 0) {
         mrb_value exc;
         exc = mrb_exc_new(mrb, E_RUNTIME_ERROR, err, strlen(err));
@@ -944,7 +993,7 @@ static mrb_value h2get_mruby_frame_ack(mrb_state *mrb, mrb_value self)
     case H2GET_HEADERS_PING:
         return ack_ping(mrb, h2g_frame);
     case H2GET_HEADERS_SETTINGS:
-        return ack_settings(mrb, h2g_frame->ctx);
+        return ack_settings(mrb, h2g_frame->conn);
     default:
         mrb_raise(mrb, E_ARGUMENT_ERROR, "Frame type must be PING or SETTINGS");
     }
@@ -989,6 +1038,12 @@ static mrb_value h2get_mruby_priority_init(mrb_state *mrb, mrb_value self)
     return self;
 }
 
+static void eval_embedded_code(mrb_state *mrb, const char *code, const char *path)
+{
+    mrb_funcall(mrb, mrb_top_self(mrb), "eval", 4, mrb_str_new_cstr(mrb, code), mrb_nil_value(),
+        mrb_str_new_cstr(mrb, path), mrb_fixnum_value(1));
+}
+
 void run_mruby(const char *rbfile, int argc, char **argv)
 {
     mrb_value ARGV;
@@ -1013,36 +1068,35 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     h2get_mruby_priority = mrb_define_class(mrb, "H2Priority", mrb->object_class);
     MRB_SET_INSTANCE_TT(h2get_mruby_priority, MRB_TT_DATA);
 
+    h2get_mruby_conn = mrb_define_class(mrb, "H2Conn", mrb->object_class);
+    MRB_SET_INSTANCE_TT(h2get_mruby_conn, MRB_TT_DATA);
+
     /* H2 */
     mrb_define_method(mrb, h2get_mruby, "initialize", h2get_mruby_init, MRB_ARGS_ARG(0, 0));
     mrb_define_class_method(mrb, h2get_mruby, "server", h2get_mruby_server_init, MRB_ARGS_ARG(1, 0));
     mrb_define_method(mrb, h2get_mruby, "connect", h2get_mruby_connect, MRB_ARGS_ARG(1, 0));
-
     mrb_define_method(mrb, h2get_mruby, "listen", h2get_mruby_listen, MRB_ARGS_ARG(1, 0));
-    mrb_define_method(mrb, h2get_mruby, "accept", h2get_mruby_accept, MRB_ARGS_ARG(0, 0));
-
-    mrb_define_method(mrb, h2get_mruby, "expect_prefix", h2get_mruby_expect_prefix, MRB_ARGS_ARG(0, 1));
-
-    mrb_define_method(mrb, h2get_mruby, "send_prefix", h2get_mruby_send_prefix, MRB_ARGS_ARG(0, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_settings", h2get_mruby_send_settings, MRB_ARGS_ARG(0, 1));
-    mrb_define_method(mrb, h2get_mruby, "send_settings_ack", h2get_mruby_send_settings_ack, MRB_ARGS_ARG(0, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_priority", h2get_mruby_send_priority, MRB_ARGS_ARG(4, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_ping", h2get_mruby_send_ping, MRB_ARGS_ARG(0, 1));
-    mrb_define_method(mrb, h2get_mruby, "send_rst_stream", h2get_mruby_send_rst_stream, MRB_ARGS_ARG(2, 1));
-    mrb_define_method(mrb, h2get_mruby, "send_window_update", h2get_mruby_send_window_update, MRB_ARGS_ARG(2, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_goaway", h2get_mruby_send_goaway, MRB_ARGS_ARG(2, 1));
-    mrb_define_method(mrb, h2get_mruby, "send_raw_frame", h2get_mruby_send_raw_frame, MRB_ARGS_ARG(2, 2));
-
-    mrb_define_method(mrb, h2get_mruby, "get", h2get_mruby_get, MRB_ARGS_ARG(1, 0));
-    mrb_define_method(mrb, h2get_mruby, "getp", h2get_mruby_getp, MRB_ARGS_ARG(3, 0));
-    mrb_define_method(mrb, h2get_mruby, "send_headers", h2get_mruby_send_headers, MRB_ARGS_ARG(2, 3));
-    mrb_define_method(mrb, h2get_mruby, "send_data", h2get_mruby_send_data, MRB_ARGS_ARG(1, 2));
-    mrb_define_method(mrb, h2get_mruby, "send_continuation", h2get_mruby_send_continuation, MRB_ARGS_ARG(2, 1));
-
-    mrb_define_method(mrb, h2get_mruby, "on_settings", h2get_mruby_on_settings, MRB_ARGS_ARG(1, 0));
-    mrb_define_method(mrb, h2get_mruby, "read", h2get_mruby_read, MRB_ARGS_ARG(0, 1));
-    mrb_define_method(mrb, h2get_mruby, "close", h2get_mruby_close, MRB_ARGS_ARG(1, 0));
+    mrb_define_method(mrb, h2get_mruby, "accept", h2get_mruby_accept, MRB_ARGS_ARG(0, 1));
     mrb_define_method(mrb, h2get_mruby, "destroy", h2get_mruby_destroy, MRB_ARGS_ARG(1, 0));
+
+    mrb_define_method(mrb, h2get_mruby_conn, "expect_prefix", h2get_mruby_conn_expect_prefix, MRB_ARGS_ARG(0, 1));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_prefix", h2get_mruby_conn_send_prefix, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_settings", h2get_mruby_conn_send_settings, MRB_ARGS_ARG(0, 1));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_settings_ack", h2get_mruby_conn_send_settings_ack, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_priority", h2get_mruby_conn_send_priority, MRB_ARGS_ARG(4, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_ping", h2get_mruby_conn_send_ping, MRB_ARGS_ARG(0, 1));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_rst_stream", h2get_mruby_conn_send_rst_stream, MRB_ARGS_ARG(2, 1));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_window_update", h2get_mruby_conn_send_window_update, MRB_ARGS_ARG(2, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_goaway", h2get_mruby_conn_send_goaway, MRB_ARGS_ARG(2, 1));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_raw_frame", h2get_mruby_conn_send_raw_frame, MRB_ARGS_ARG(2, 2));
+    mrb_define_method(mrb, h2get_mruby_conn, "get", h2get_mruby_conn_get, MRB_ARGS_ARG(1, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "getp", h2get_mruby_conn_getp, MRB_ARGS_ARG(3, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_headers", h2get_mruby_conn_send_headers, MRB_ARGS_ARG(2, 3));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_data", h2get_mruby_conn_send_data, MRB_ARGS_ARG(1, 2));
+    mrb_define_method(mrb, h2get_mruby_conn, "send_continuation", h2get_mruby_conn_send_continuation, MRB_ARGS_ARG(2, 1));
+    mrb_define_method(mrb, h2get_mruby_conn, "on_settings", h2get_mruby_conn_on_settings, MRB_ARGS_ARG(1, 0));
+    mrb_define_method(mrb, h2get_mruby_conn, "read", h2get_mruby_conn_read, MRB_ARGS_ARG(0, 1));
+    mrb_define_method(mrb, h2get_mruby_conn, "close", h2get_mruby_conn_close, MRB_ARGS_ARG(1, 0));
 
     mrb_define_global_const(mrb, "ACK", mrb_fixnum_value(0x1));
     mrb_define_global_const(mrb, "END_STREAM", mrb_fixnum_value(0x1));
@@ -1074,6 +1128,10 @@ void run_mruby(const char *rbfile, int argc, char **argv)
 
     /* Kernel */
     mrb_define_method(mrb, mrb->kernel_module, "sleep", h2get_mruby_kernel_sleep, MRB_ARGS_ARG(1, 0));
+
+    /* run embedded mruby code */
+    eval_embedded_code(mrb, H2GET_MRUBY_CODE_H2, H2GET_MRUBY_PATH_H2);
+    eval_embedded_code(mrb, H2GET_MRUBY_CODE_H2CONN, H2GET_MRUBY_PATH_H2CONN);
 
     FILE *f = fopen(rbfile, "r");
     if (!f) {
