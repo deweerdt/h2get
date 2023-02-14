@@ -1,6 +1,6 @@
 #include "h2get.h"
+#include <errno.h>
 #include <unistd.h>
-
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <poll.h>
