@@ -75,7 +75,8 @@ ENDIF ()
 IF (NOT WITH_MRUBY_INCLUDE OR NOT WITH_MRUBY_LIB)
     ADD_CUSTOM_TARGET(mruby MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN}
                       MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb
-                      MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby ruby minirake
+                      MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby
+                      INSTALL_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby-bin ruby minirake
                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby)
 
     TARGET_INCLUDE_DIRECTORIES(h2get BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include)
