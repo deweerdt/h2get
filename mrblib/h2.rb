@@ -27,7 +27,7 @@ class H2
       if @current_conn.nil?
         raise 'no available connection'
       end
-      @current_conn.send(meth, *args)
+      @current_conn.__send__(meth, *args)
     end
   end
 end

@@ -1,21 +1,21 @@
-begin
-    h2g = H2.new
-    h2g.connect('https://www.google.com')
-    h2g.send_prefix()
-    h2g.send_settings()
-    f = h2g.read(-1)
-    puts f.to_s
-    h2g.settings_ack()
-    (1..2).each {
-        h2g.get()
-        f = h2g.read(-1)
-        puts f.to_s
-    }
-    f = h2g.read(-1)
-    puts f.to_s
-rescue Exception => e
-    h2g.close()
-    puts e.message
-    puts e.backtrace.inspect
-end
+# usage: h2get test.rb <url> <path>
+
+url = ARGV[0] || "https://www.google.com"
+path = ARGV[1] || "/"
+
+h2g = H2.new
+h2g.connect(url)
+h2g.send_prefix()
+h2g.send_settings()
+frame = h2g.read(-1)
+puts frame
+h2g.send_settings_ack()
+(1..2).each {
+    h2g.get("/")
+    frame = h2g.read(-1)
+    puts frame
+}
+frame = h2g.read(-1)
+puts frame
+
 puts "OK"
