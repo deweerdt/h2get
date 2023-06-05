@@ -16,3 +16,4 @@ mruby/
 .*.sw?
 test_*
 mruby_config.rb.lock
+build/
