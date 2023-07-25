@@ -178,8 +178,8 @@ static inline int h2get_buf_printf(struct h2get_buf *out, char *fmt, ...)
     if (ret < 0) {
         return ret;
     }
-    newsz= out->len + ret + 1;
-    p = realloc(out->buf, newsz);
+    newsz= out->len + ret;
+    p = realloc(out->buf, newsz + 1);
     if (!p) {
         return -1;
     }
