@@ -606,7 +606,7 @@ int h2get_conn_send_rst_stream(struct h2get_conn *conn, uint32_t stream_id, uint
     };
 
     rst_stream.header.stream_id = htonl(stream_id) >> 1;
-    rst_stream.header.len = sizetoh2len(rst_stream.error_code);
+    rst_stream.header.len = sizetoh2len(sizeof(rst_stream.error_code));
     rst_stream.error_code = htonl(error_code);
 
     if (conn->state < H2GET_CONN_STATE_CONNECT) {
