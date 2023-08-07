@@ -200,6 +200,15 @@ static mrb_value h2get_mruby_listen(mrb_state *mrb, mrb_value self)
         backlog = 5;
     }
 
+#if __clang_major__ < 5
+    if (url == NULL) {
+        if (mrb_get_args(mrb, "z", &url, &backlog) < 1) {
+            goto on_error;
+        }
+        backlog = 5;
+    }
+#endif
+
     if (h2get_listen(&h2g->ctx, H2GET_BUFSTR(url), backlog, &err) != 0) {
         goto on_error;
     }
