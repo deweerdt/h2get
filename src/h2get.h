@@ -255,7 +255,6 @@ struct h2get_conn {
 };
 
 enum h2get_transport {
-    H2GET_TRANSPORT_UNIX,
     H2GET_TRANSPORT_PLAIN,
     H2GET_TRANSPORT_SSL,
 };

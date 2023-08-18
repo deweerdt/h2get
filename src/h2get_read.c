@@ -206,7 +206,7 @@ static void h2get_frame_render_settings(struct h2get_conn *conn, struct h2get_bu
         default:
             /* An endpoint that receives a SETTINGS frame with any unknown or
              * unsupported identifier MUST ignore that setting. */
-            h2get_buf_printf(out, "\n\tunknown frame type: %u", ntohs(settings[i].id));
+            h2get_buf_printf(out, "\n\tunknown settings type: %u=%u", htons(settings[i].id), v);
             break;
         }
     }
