@@ -68,19 +68,13 @@ void h2get_ctx_init(struct h2get_ctx *ctx)
     memset(ctx, 0, sizeof(*ctx));
     conn_init(ctx, &ctx->server.listener);
 
-    if (0) {
-        // TODO: support non-TLS connections
-        h2get_ctx_register_ops(ctx, &plain_ops);
-    }
+    h2get_ctx_register_ops(ctx, &plain_ops);
     h2get_ctx_register_ops(ctx, &ssl_ops);
 }
 
 bool h2get_ctx_is_server(struct h2get_ctx *ctx)
 {
-    if (ctx->server.cert_path != NULL) {
-        return true;
-    }
-    return false;
+    return ctx->is_server;
 }
 
 #define CHECK_CONN() do { \
