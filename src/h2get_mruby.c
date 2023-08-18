@@ -119,18 +119,16 @@ static mrb_value h2get_mruby_init(mrb_state *mrb, mrb_value self)
 static mrb_value h2get_mruby_server_init(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
-    mrb_value *argv;
-    mrb_int argc;
-    mrb_get_args(mrb, "*", &argv, &argc);
+    mrb_value opts;
+    mrb_bool opts_exists;
+    mrb_get_args(mrb, "|H?", &opts, &opts_exists);
 
     struct RClass *klass = mrb_class_ptr(self);
     assert(klass != NULL);
     mrb_value mh2g = mrb_obj_new(mrb, klass, 0, NULL);
     h2g = (struct h2get_mruby *)DATA_PTR(mh2g);
 
-    if ((int)argc == 1) {
-        mrb_value opts;
-        mrb_get_args(mrb, "H", &opts);
+    if (opts_exists) {
         mrb_value cert_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "cert_path"));
         mrb_value key_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "key_path"));
 
