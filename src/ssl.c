@@ -49,7 +49,7 @@ static int ssl_init(struct h2get_conn *conn, const char **err)
     method = is_server ? SSLv23_server_method() : SSLv23_client_method();
     ctx = SSL_CTX_new(method);
     if (is_server) {
-        if (conn->ctx->server.cert_path == NULL || conn->ctx->server.key_path) {
+        if (conn->ctx->server.cert_path == NULL || conn->ctx->server.key_path == NULL) {
             *err = "SSL servers must be initialized with a cert and a key";
             goto err;
         }
