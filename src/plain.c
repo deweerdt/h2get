@@ -46,8 +46,8 @@ static int plain_write(struct h2get_conn *conn, struct h2get_buf *bufs, size_t n
             if (ret < 0) {
                 return -1;
             }
-            wlen -= ret;
-        } while (wlen > 0);
+            wlen += ret;
+        } while (wlen < bufs[i].len);
     }
     return 0;
 }
