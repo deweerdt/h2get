@@ -405,6 +405,7 @@ struct h2get_ctx {
     struct h2get_ops *registered_ops;
     size_t nr_ops;
 
+    bool is_server;
     struct {
         const char *cert_path;
         const char *key_path;

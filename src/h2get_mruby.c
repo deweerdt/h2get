@@ -119,28 +119,29 @@ static mrb_value h2get_mruby_init(mrb_state *mrb, mrb_value self)
 static mrb_value h2get_mruby_server_init(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby *h2g;
-    H2GET_MRUBY_ASSERT_ARGS(1);
-
     mrb_value opts;
-    mrb_get_args(mrb, "H", &opts);
-    mrb_value cert_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "cert_path"));
-    if (mrb_nil_p(cert_path)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "cert_path is missing"));
-        return mrb_nil_value();
-    }
-    mrb_value key_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "key_path"));
-    if (mrb_nil_p(key_path)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "key_path is missing"));
-        return mrb_nil_value();
-    }
+    mrb_bool opts_exists;
+    mrb_get_args(mrb, "|H?", &opts, &opts_exists);
 
     struct RClass *klass = mrb_class_ptr(self);
     assert(klass != NULL);
     mrb_value mh2g = mrb_obj_new(mrb, klass, 0, NULL);
     h2g = (struct h2get_mruby *)DATA_PTR(mh2g);
 
-    h2g->ctx.server.cert_path = mrb_str_to_cstr(mrb, cert_path);
-    h2g->ctx.server.key_path = mrb_str_to_cstr(mrb, key_path);
+    if (opts_exists) {
+        mrb_value cert_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "cert_path"));
+        mrb_value key_path = mrb_hash_get(mrb, opts, mrb_str_new_lit(mrb, "key_path"));
+
+        if (mrb_nil_p(cert_path) != mrb_nil_p(key_path)) {
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "both `cert_path` and `key_path` must be passed at the same time"));
+            return mrb_nil_value();
+        }
+        if (!mrb_nil_p(cert_path)) {
+            h2g->ctx.server.cert_path = mrb_str_to_cstr(mrb, cert_path);
+            h2g->ctx.server.key_path = mrb_str_to_cstr(mrb, key_path);
+        }
+    }
+    h2g->ctx.is_server = true;
 
     return mh2g;
 }
