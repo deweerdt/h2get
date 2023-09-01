@@ -721,7 +721,7 @@ int h2get_conn_send_headers(struct h2get_conn *conn, struct h2get_buf *headers, 
 
     for (i = 0, hp = headers; i < nr_headers; i++, hp += 2) {
         struct h2get_buf *hname = hp, *hvalue = hp + 1;
-        plen += 3 + hname->len + hvalue->len;
+        plen += h2get_hpack_get_encoded_header_size(hname, hvalue);
     }
 
     payload = alloca(plen);
@@ -823,8 +823,8 @@ int h2get_conn_getp(struct h2get_conn *conn, const char *path, uint32_t sid, str
     char *whead, *payload;
 
     plen += 1 + 1;                          /* GET and https */
-    plen += 3 + 5 + strlen(path);           /* :path */
-    plen += 3 + 10 + conn->url.raw.host.len; /* :authority */
+    plen += h2get_hpack_get_encoded_header_size(&H2GET_BUFLIT(":authority"), &conn->url.raw.host);
+    plen += h2get_hpack_get_encoded_header_size(&H2GET_BUFLIT(":path"), &H2GET_BUFSTR((char *)path));
 
     payload = alloca(plen);
     whead = payload;
@@ -868,8 +868,8 @@ int h2get_conn_get(struct h2get_conn *conn, const char *path, const char **err)
     char *whead, *payload;
 
     plen += 1 + 1;                          /* GET and https */
-    plen += 3 + 5 + strlen(path);           /* :path */
-    plen += 3 + 10 + conn->url.raw.host.len; /* :authority */
+    plen += h2get_hpack_get_encoded_header_size(&H2GET_BUFLIT(":authority"), &conn->url.raw.host);
+    plen += h2get_hpack_get_encoded_header_size(&H2GET_BUFLIT(":path"), &H2GET_BUFSTR((char *)path));
 
     payload = alloca(plen);
     whead = payload;
