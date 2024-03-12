@@ -13,10 +13,11 @@ struct h2get_header {
     struct h2get_buf *value;
 };
 
+// https://www.rfc-editor.org/rfc/rfc7541.html#appendix-A
 static struct h2get_buf h2get_header_authority = { H2GET_BUFLIT_ELMS(":authority") };
 static struct h2get_buf h2get_header_method = { H2GET_BUFLIT_ELMS(":method") };
-static struct h2get_buf h2get_header_method_get = { H2GET_BUFLIT_ELMS("get") };
-static struct h2get_buf h2get_header_method_post = { H2GET_BUFLIT_ELMS("post") };
+static struct h2get_buf h2get_header_method_get = { H2GET_BUFLIT_ELMS("GET") };
+static struct h2get_buf h2get_header_method_post = { H2GET_BUFLIT_ELMS("POST") };
 static struct h2get_buf h2get_header_path = { H2GET_BUFLIT_ELMS(":path") };
 static struct h2get_buf h2get_header_path_slash = { H2GET_BUFLIT_ELMS("/") };
 static struct h2get_buf h2get_header_path_index_html = { H2GET_BUFLIT_ELMS("/index.html") };
@@ -33,7 +34,7 @@ static struct h2get_buf h2get_header_status_404 = { H2GET_BUFLIT_ELMS("404") };
 static struct h2get_buf h2get_header_status_500 = { H2GET_BUFLIT_ELMS("500") };
 static struct h2get_buf h2get_header_accept_charset = { H2GET_BUFLIT_ELMS("accept-charset") };
 static struct h2get_buf h2get_header_accept_encoding = { H2GET_BUFLIT_ELMS("accept-encoding") };
-static struct h2get_buf h2get_header_accept_encoding_gzip_deflate = { H2GET_BUFLIT_ELMS("accept-encoding-gzip-deflate") };
+static struct h2get_buf h2get_header_accept_encoding_gzip_deflate = { H2GET_BUFLIT_ELMS("gzip, deflate") };
 static struct h2get_buf h2get_header_accept_language = { H2GET_BUFLIT_ELMS("accept-language") };
 static struct h2get_buf h2get_header_accept_ranges = { H2GET_BUFLIT_ELMS("accept-ranges") };
 static struct h2get_buf h2get_header_accept = { H2GET_BUFLIT_ELMS("accept") };
