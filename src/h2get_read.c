@@ -37,8 +37,7 @@ static char *h2get_header_to_txt[] = {
 };
 
 #define RENDERER(name)                                                                                                 \
-    static void h2get_frame_render_##name(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,     \
-                                          char *p, size_t plen)                                                        \
+    static void h2get_frame_render_##name(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)                  \
     {                                                                                                                  \
         h2get_buf_printf(out, "\n%s", "h2get_frame_" #name "_render");                                                 \
     }
@@ -50,94 +49,83 @@ RENDERER(continuation)
 
 #undef RENDERER
 
-#define H2GET_HEADERS_HEADERS_END_STREAM 0x1
-#define H2GET_HEADERS_HEADERS_END_HEADERS 0x4
-#define H2GET_HEADERS_HEADERS_PADDED 0x8
-#define H2GET_HEADERS_HEADERS_PRIORITY 0x20
-
-static void h2get_frame_render_headers(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
-                                       char *payload, size_t plen)
+static void h2get_frame_render_headers(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
-    struct list headers, *cur, *next;
-    int ret;
+    const struct h2get_h2_header *h = &h2g_frame->header;
+    char *payload = h2g_frame->payload;
+    size_t plen = h2g_frame->payload_len;
 
     if (h->flags) {
         h2get_buf_printf(out, "\n\tflags: ");
-        if (h->flags & H2GET_HEADERS_HEADERS_END_STREAM)
+        if (h->flags & H2GET_HEADERS_HEADERS_FLAG_END_STREAM)
             h2get_buf_printf(out, "END_STREAM ");
-        if (h->flags & H2GET_HEADERS_HEADERS_END_HEADERS)
+        if (h->flags & H2GET_HEADERS_HEADERS_FLAG_END_HEADERS)
             h2get_buf_printf(out, "END_HEADERS ");
-        if (h->flags & H2GET_HEADERS_HEADERS_PADDED)
+        if (h->flags & H2GET_HEADERS_HEADERS_FLAG_PADDED)
             h2get_buf_printf(out, "PADDED ");
-        if (h->flags & H2GET_HEADERS_HEADERS_PRIORITY)
+        if (h->flags & H2GET_HEADERS_HEADERS_FLAG_PRIORITY)
             h2get_buf_printf(out, "PRIORITY ");
     }
 
-    if (h->flags & H2GET_HEADERS_HEADERS_PRIORITY) {
-        struct h2get_h2_priority *prio = (struct h2get_h2_priority *)payload;
-        payload += sizeof(*prio);
-        plen -= sizeof(*prio);
-        h2get_buf_printf(out, "\nPriority: %sexclusive, stream dependency: %lu, weight: %u",
-                         h2get_h2_priority_is_exclusive(prio) ? "" : "not ", h2get_h2_priority_get_dep_stream_id(prio),
-                         prio->weight);
+    if (h->flags & H2GET_HEADERS_HEADERS_FLAG_PRIORITY) {
+        if (plen >= sizeof(struct h2get_h2_priority)) {
+            struct h2get_h2_priority *prio = (struct h2get_h2_priority *)payload;
+            payload += sizeof(*prio);
+            plen -= sizeof(*prio);
+            h2get_buf_printf(out, "\nPriority: %sexclusive, stream dependency: %lu, weight: %u",
+                             h2get_h2_priority_is_exclusive(prio) ? "" : "not ",
+                             h2get_h2_priority_get_dep_stream_id(prio), prio->weight);
+        } else {
+            h2get_buf_printf(out, "\nPriority flag set but payload too short (%zu < %zu)", plen,
+                             sizeof(struct h2get_h2_priority));
+        }
     }
 
-    list_init(&headers);
-
-    ret = h2get_hpack_decode(&conn->own_hpack, payload, plen, &headers);
-    if (ret < 0) {
-        h2get_buf_printf(out, "\nError decoding headers");
-        return;
-    }
+    struct list *cur, *next;
     h2get_buf_printf(out, "\n\tcompressed: ");
-    for (cur = headers.next; cur != &headers; cur = cur->next) {
+    for (cur = h2g_frame->field_lines.next; cur != &h2g_frame->field_lines; cur = cur->next) {
         struct h2get_decoded_header *hdh = list_to_dh(cur);
         if (hdh->compressed)  {
             h2get_buf_printf(out, "'%.*s' ", hdh->key.len, hdh->key.buf);
         }
     }
-
-    for (cur = headers.next; cur != &headers; cur = next) {
+    for (cur = h2g_frame->field_lines.next; cur != &h2g_frame->field_lines; cur = next) {
         struct h2get_decoded_header *hdh = list_to_dh(cur);
-
         next = cur->next;
-        list_del(&hdh->node);
-
         h2get_buf_printf(out, "\n\t'%.*s' => '%.*s'", hdh->key.len, hdh->key.buf, hdh->value.len, hdh->value.buf);
-        h2get_decoded_header_free(hdh);
     }
-    return;
 }
 
-static void h2get_frame_render_window_update(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
-                                             char *payload, size_t plen)
+static void h2get_frame_render_window_update(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
+    char *payload = h2g_frame->payload;
     h2get_buf_printf(out, "\n\tincrement => %lu", ntohl(*(uint32_t *)payload) >> 1);
-    return;
 }
 
-static void h2get_frame_render_data(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
-                                    char *payload, size_t plen)
+static void h2get_frame_render_data(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
+    char *payload = h2g_frame->payload;
+    size_t plen = h2g_frame->payload_len;
     dump_zone(payload, plen);
 }
 
-static void h2get_frame_render_unknown(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
-                                       char *payload, size_t plen)
+static void h2get_frame_render_unknown(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
+    char *payload = h2g_frame->payload;
+    size_t plen = h2g_frame->payload_len;
     h2get_buf_write(out, H2GET_BUF(payload, plen));
 }
 
-static void h2get_frame_render_rst_stream(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
-                                          char *payload, size_t plen)
+static void h2get_frame_render_rst_stream(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
+    char *payload = h2g_frame->payload;
     h2get_buf_printf(out, "\n\terror_code => %lu", ntohl(*(uint32_t *)payload));
-    return;
 }
 
-static void h2get_frame_render_goaway(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
-                                      char *payload, size_t plen)
+static void h2get_frame_render_goaway(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
+    char *payload = h2g_frame->payload;
+    size_t plen = h2g_frame->payload_len;
     struct h2get_h2_goaway *f = (struct h2get_h2_goaway *)payload;
     h2get_buf_printf(out, "\n\tstream_id: %u, error: '%s'", ntohl(f->last_stream_id),
                      h2get_render_error_code(ntohl(f->error_code)));
@@ -146,9 +134,11 @@ static void h2get_frame_render_goaway(struct h2get_conn *conn, struct h2get_buf 
     }
 }
 
-static void h2get_frame_render_settings(struct h2get_conn *conn, struct h2get_buf *out, struct h2get_h2_header *h,
-                                        char *payload, size_t plen)
+static void h2get_frame_render_settings(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
+    const struct h2get_h2_header *h = &h2g_frame->header;
+    char *payload = h2g_frame->payload;
+    size_t plen = h2g_frame->payload_len;
     struct h2get_h2_setting *settings;
     int i;
 

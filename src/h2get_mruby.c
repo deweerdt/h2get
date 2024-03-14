@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include "h2get.h"
+#include "hpack.h"
 
 #include "mruby.h"
 #include "mruby/array.h"
@@ -26,13 +27,6 @@ struct h2get_mruby {
 
 struct h2get_mruby_priority {
     struct h2get_h2_priority prio;
-};
-
-struct h2get_mruby_frame {
-    struct h2get_conn *conn;
-    struct h2get_h2_header header;
-    size_t payload_len;
-    char payload[1];
 };
 
 struct h2get_mruby_conn {
@@ -59,8 +53,25 @@ static const struct mrb_data_type h2get_mruby_type = {
     H2GET_MRUBY_KEY, on_gc_dispose,
 };
 
+static void on_gc_dispose_frame(mrb_state *mrb, void *_frame)
+{
+    struct h2get_mruby_frame *frame = _frame;
+    if (frame == NULL)
+        return;
+
+    struct list *cur, *next;
+    for (cur = frame->field_lines.next; cur != &frame->field_lines; cur = next) {
+        struct h2get_decoded_header *hdh = list_to_dh(cur);
+        next = cur->next;
+        list_del(&hdh->node);
+        h2get_decoded_header_free(hdh);
+    }
+
+    mrb_free(mrb, frame);
+}
+
 static const struct mrb_data_type h2get_mruby_frame_type = {
-    H2GET_MRUBY_FRAME_KEY, mrb_free,
+    H2GET_MRUBY_FRAME_KEY, on_gc_dispose_frame,
 };
 
 static const struct mrb_data_type h2get_mruby_priority_type = {
@@ -329,6 +340,31 @@ static mrb_value create_frame(mrb_state *mrb, struct h2get_conn *conn, struct h2
     h2g_frame->header = *header;
     h2g_frame->payload_len = payload->len;
     memcpy(h2g_frame->payload, payload->buf, payload->len);
+
+    list_init(&h2g_frame->field_lines);
+
+    // HEADERS, PUSH_PROMISE or CONTINUATION
+    if (h2g_frame->header.type == 0x01 || h2g_frame->header.type == 0x05 || h2g_frame->header.type == 0x09) {
+        char *payload_ptr = h2g_frame->payload;
+        size_t payload_len = h2g_frame->payload_len;
+        if (h2g_frame->header.type == 0x01 && (h2g_frame->header.flags & H2GET_HEADERS_HEADERS_FLAG_PRIORITY)) {
+            if (payload_len >= sizeof(struct h2get_h2_priority)) {
+                struct h2get_h2_priority *prio = (struct h2get_h2_priority *)payload_ptr;
+                payload_ptr += sizeof(*prio);
+                payload_len -= sizeof(*prio);
+            } else {
+                fprintf(stderr, "Priority flag set but payload too short (%zu < %zu) in HEADERS frame\n", payload_len,
+                        sizeof(struct h2get_h2_priority));
+                goto no_field_lines;
+            }
+        }
+
+        int ret = h2get_hpack_decode(&conn->own_hpack, payload_ptr, payload_len, &h2g_frame->field_lines);
+        if (ret < 0) {
+            fprintf(stderr, "Error decoding field block fragment in frame type %u\n", h2g_frame->header.type);
+        }
+    no_field_lines:;
+    }
 
     mrb_data_init(frame, h2g_frame, &h2get_mruby_frame_type);
 
@@ -924,8 +960,7 @@ static mrb_value h2get_mruby_frame_to_s(mrb_state *mrb, mrb_value self)
                    h2get_frame_type_to_str(h2g_frame->header.type), (int)h2g_frame->payload_len,
                    h2g_frame->header.flags, ntohl(h2g_frame->header.stream_id << 1));
     out = H2GET_BUF(buf, ret);
-    h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame->conn, &out, &h2g_frame->header,
-                                                     h2g_frame->payload, h2g_frame->payload_len);
+    h2get_frame_get_renderer(h2g_frame->header.type)(h2g_frame, &out);
 
     str = mrb_str_new(mrb, out.buf, out.len);
     free(out.buf);
