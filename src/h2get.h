@@ -354,6 +354,13 @@ struct h2get_h2_goaway {
     char additional_debug_data[];
 } __attribute__((packed));
 
+struct h2get_mruby_frame {
+    struct h2get_conn *conn;
+    struct h2get_h2_header header;
+    struct list field_lines;
+    size_t payload_len;
+    char payload[1];
+};
 
 struct h2get_ctx;
 void h2get_ctx_init(struct h2get_ctx *ctx);
@@ -381,7 +388,7 @@ int h2get_conn_close(struct h2get_conn *conn, const char **err);
 const char *h2get_render_error_code(uint32_t err);
 
 int h2get_conn_send_settings_ack(struct h2get_conn *conn, int timeout);
-typedef void (*h2get_frame_render_t)(struct h2get_conn *conn, struct h2get_buf *, struct h2get_h2_header *, char *, size_t);
+typedef void (*h2get_frame_render_t)(struct h2get_mruby_frame *, struct h2get_buf *);
 h2get_frame_render_t h2get_frame_get_renderer(uint8_t type);
 const char *h2get_frame_type_to_str(uint8_t type);
 
