@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/un.h>
+
 
 #include <openssl/ssl.h>
 
@@ -304,8 +306,6 @@ int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_b
             xprt = H2GET_TRANSPORT_PLAIN;
         } else if (!h2get_buf_cmp(&url.raw.scheme, &H2GET_BUFSTR("https"))) {
             xprt = H2GET_TRANSPORT_SSL;
-        } else if (!h2get_buf_cmp(&url.raw.scheme, &H2GET_BUFSTR("unix"))) {
-            xprt = H2GET_TRANSPORT_UNIX;
         } else {
             *err = "Unknown URL scheme";
             return -1;
@@ -387,6 +387,8 @@ int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_b
 
 static int parse_url(struct h2get_buf url_buf, struct h2get_url *url, enum h2get_transport *xprt, struct h2get_conn *conn, const char **err)
 {
+    bool uds = false;
+
     *url = h2get_buf_parse_url(url_buf);
     if (url->parsed.parse_err) {
         *err = url->parsed.parse_err;
@@ -400,8 +402,12 @@ static int parse_url(struct h2get_buf url_buf, struct h2get_url *url, enum h2get
             *xprt = H2GET_TRANSPORT_PLAIN;
         } else if (!h2get_buf_cmp(&url->raw.scheme, &H2GET_BUFSTR("https"))) {
             *xprt = H2GET_TRANSPORT_SSL;
-        } else if (!h2get_buf_cmp(&url->raw.scheme, &H2GET_BUFSTR("unix"))) {
-            *xprt = H2GET_TRANSPORT_UNIX;
+        } else if (!h2get_buf_cmp(&url->raw.scheme, &H2GET_BUFSTR("http+unix"))) {
+            *xprt = H2GET_TRANSPORT_PLAIN;
+            uds = true;
+        } else if (!h2get_buf_cmp(&url->raw.scheme, &H2GET_BUFSTR("https+unix"))) {
+            *xprt = H2GET_TRANSPORT_SSL;
+            uds = true;
         } else {
             *err = "Unknown URL scheme";
             return -1;
@@ -414,6 +420,16 @@ static int parse_url(struct h2get_buf url_buf, struct h2get_url *url, enum h2get
         } else if (*xprt == H2GET_TRANSPORT_PLAIN) {
             default_port = "80";
         }
+    }
+    if (uds) {
+        conn->protocol = SOCK_STREAM;
+        conn->socktype = AF_UNIX;
+        conn->sa.sa = (void *)&conn->sa.sa_storage;
+        struct sockaddr_un *sun = (void *)conn->sa.sa;
+        sprintf(sun->sun_path, "%.*s", (int)url->raw.host.len, url->raw.host.buf);
+        sun->sun_family = AF_UNIX;
+        conn->sa.len = sizeof(*sun);
+        return 0;
     }
 
     if (*xprt == H2GET_TRANSPORT_PLAIN || *xprt == H2GET_TRANSPORT_SSL) {
@@ -445,7 +461,7 @@ static int parse_url(struct h2get_buf url_buf, struct h2get_url *url, enum h2get
             break;
         }
         if (!rp) {
-            *err = "Connection failed";
+            *err = "Socket creation failed";
             return -1;
         }
         conn->protocol = rp->ai_protocol;
