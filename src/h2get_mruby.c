@@ -643,12 +643,10 @@ static mrb_value h2get_mruby_conn_send_data(mrb_state *mrb, mrb_value self)
 {
     const char *err;
     char *data_str = NULL;
-    int ret, data_len = 0;
-    mrb_int mrb_flags, mrb_stream_id;
+    int ret;
+    mrb_int mrb_flags, mrb_stream_id, data_len = 0;
 
-    mrb_get_args(mrb, "i|is", &mrb_stream_id, &mrb_flags, &data_str);
-    if (data_str != NULL)
-	    data_len = strlen(data_str);
+    mrb_get_args(mrb, "i|is", &mrb_stream_id, &mrb_flags, &data_str, &data_len);
 
     struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
@@ -836,12 +834,10 @@ static mrb_value h2get_mruby_conn_send_raw_frame(mrb_state *mrb, mrb_value self)
 {
     const char *err;
     char *data_str = NULL;
-    int ret, data_len = 0;
-    mrb_int mrb_flags, mrb_stream_id, mrb_type;
+    int ret;
+    mrb_int mrb_flags, mrb_stream_id, mrb_type, data_len;
 
-    mrb_get_args(mrb, "ii|is", &mrb_stream_id, &mrb_type, &mrb_flags, &data_str);
-    if (data_str != NULL)
-	    data_len = strlen(data_str);
+    mrb_get_args(mrb, "ii|is", &mrb_stream_id, &mrb_type, &mrb_flags, &data_str, &data_len);
 
     struct h2get_conn *conn = mrb_data_get_ptr(mrb, self, &h2get_mruby_conn_type);
 
