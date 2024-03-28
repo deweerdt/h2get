@@ -643,8 +643,8 @@ static mrb_value h2get_mruby_conn_send_data(mrb_state *mrb, mrb_value self)
 {
     const char *err;
     char *data_str = NULL;
-    int ret, data_len = 0;
-    mrb_int mrb_flags, mrb_stream_id;
+    int ret;
+    mrb_int mrb_flags, mrb_stream_id, data_len = 0;
 
     mrb_get_args(mrb, "i|is", &mrb_stream_id, &mrb_flags, &data_str, &data_len);
 
@@ -834,8 +834,8 @@ static mrb_value h2get_mruby_conn_send_raw_frame(mrb_state *mrb, mrb_value self)
 {
     const char *err;
     char *data_str = NULL;
-    int ret, data_len = 0;
-    mrb_int mrb_flags, mrb_stream_id, mrb_type;
+    int ret;
+    mrb_int mrb_flags, mrb_stream_id, mrb_type, data_len;
 
     mrb_get_args(mrb, "ii|is", &mrb_stream_id, &mrb_type, &mrb_flags, &data_str, &data_len);
 
@@ -936,6 +936,18 @@ static mrb_value h2get_mruby_frame_type_num(mrb_state *mrb, mrb_value self)
     h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
 
     return mrb_fixnum_value(h2g_frame->header.type);
+}
+
+static mrb_value h2get_mruby_frame_payload_array(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby_frame *h2g_frame;
+
+    h2g_frame = (struct h2get_mruby_frame *)DATA_PTR(self);
+    mrb_value array = mrb_ary_new(mrb);
+    for (int i = 0; i < h2g_frame->payload_len; i++) {
+        mrb_ary_push(mrb, array, mrb_int_value(mrb, h2g_frame->payload[i]));
+    }
+    return array;
 }
 
 static mrb_value h2get_mruby_frame_payload(mrb_state *mrb, mrb_value self)
@@ -1161,6 +1173,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby_frame, "type_num", h2get_mruby_frame_type_num, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "to_s", h2get_mruby_frame_to_s, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "payload", h2get_mruby_frame_payload, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_frame, "to_a", h2get_mruby_frame_payload_array, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "flags", h2get_mruby_frame_flags, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "len", h2get_mruby_frame_len, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "stream_id", h2get_mruby_frame_stream_id, MRB_ARGS_ARG(0, 0));
