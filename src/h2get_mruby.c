@@ -835,7 +835,7 @@ static mrb_value h2get_mruby_conn_send_raw_frame(mrb_state *mrb, mrb_value self)
     const char *err;
     char *data_str = NULL;
     int ret;
-    mrb_int mrb_flags, mrb_stream_id, mrb_type, data_len;
+    mrb_int mrb_flags, mrb_stream_id, mrb_type, data_len = 0;
 
     mrb_get_args(mrb, "ii|is", &mrb_stream_id, &mrb_type, &mrb_flags, &data_str, &data_len);
 
