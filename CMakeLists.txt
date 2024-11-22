@@ -11,6 +11,15 @@ ELSE ()
     SET(SSL_LIB_DIR ${H2GET_SSL_ROOT_DIR}/lib)
     SET(SSL_LIBRARIES "ssl;crypto")
 ENDIF ()
+IF (EXISTS "${SSL_INCLUDE_DIR}/openssl/base.h")
+    IF (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        LIST(APPEND SSL_LIBRARIES "c++")
+    ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        LIST(APPEND SSL_LIBRARIES "stdc++")
+    ELSE ()
+        MESSAGE(FATAL_ERROR "do not know how to declare dependency on C++ stdlib even though libssl.a of boringssl depends on it")
+    ENDIF ()
+ENDIF ()
 
 INCLUDE_DIRECTORIES(
     ${SSL_INCLUDE_DIR}
