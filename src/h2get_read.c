@@ -102,11 +102,36 @@ static void h2get_frame_render_window_update(struct h2get_mruby_frame *h2g_frame
     h2get_buf_printf(out, "\n\tincrement => %lu", ntohl(*(uint32_t *)payload) >> 1);
 }
 
+static void render_payload(struct h2get_buf *out, void *buf, int len)
+{
+    char *data = buf;
+    h2get_buf_printf(out, "\n================================================================================\n");
+    for (size_t offset = 0; offset < len; offset += 16) {
+        int limit = 16;
+        if (offset + limit > len)
+            limit = len - offset;
+
+	h2get_buf_printf(out, "%03x:", offset);
+	for (size_t i = 0; i < limit; i++) {
+	    h2get_buf_printf(out, " %02x", (unsigned char)data[offset + i]);
+	}
+	for (size_t i = 0; i + limit < 16; i++) {
+	    h2get_buf_printf(out, "   ");
+	}
+	h2get_buf_printf(out, " ");
+	for (size_t i = 0; i < limit; i++) {
+	    h2get_buf_printf(out, "%c", isprint(data[offset + i]) ? data[offset+i]:'.');
+	}
+	h2get_buf_printf(out, "\n");
+    }
+    h2get_buf_printf(out, "================================================================================\n\n");
+}
+
 static void h2get_frame_render_data(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
 {
     char *payload = h2g_frame->payload;
     size_t plen = h2g_frame->payload_len;
-    dump_zone(payload, plen);
+    render_payload(out, payload, plen);
 }
 
 static void h2get_frame_render_unknown(struct h2get_mruby_frame *h2g_frame, struct h2get_buf *out)
