@@ -283,7 +283,7 @@ int h2get_destroy(struct h2get_ctx *ctx, const char **err)
     return 0;
 }
 
-int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_buf url_buf, const char **err)
+int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_buf url_buf, char *servername, const char **err)
 {
     conn_init(ctx, conn);
 
@@ -372,7 +372,12 @@ int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_b
         }
     }
 
-    conn->servername = url.raw.host;
+    if (servername != NULL) {
+        conn->servername = H2GET_BUFSTR(servername);
+    } else {
+        conn->servername = url.raw.host;
+    }
+
     ret = conn->ops->connect(conn);
     if (ret < 0) {
         *err = "Connection failed";
