@@ -170,13 +170,12 @@ static mrb_value h2get_mruby_connect(mrb_state *mrb, mrb_value self)
         goto on_error;
     }
 
-    H2GET_MRUBY_ASSERT_ARGS(1);
-
     char *url = NULL;
-    mrb_get_args(mrb, "z", &url);
+    char *servername = NULL;
+    mrb_get_args(mrb, "z|z", &url, &servername);
 
     conn = (void *)mrb_malloc(mrb, sizeof(*conn));
-    if (h2get_connect(&h2g->ctx, &conn->conn, H2GET_BUFSTR(url), &err) != 0) {
+    if (h2get_connect(&h2g->ctx, &conn->conn, H2GET_BUFSTR(url), servername, &err) != 0) {
         goto on_error;
     }
 

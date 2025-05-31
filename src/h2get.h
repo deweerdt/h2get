@@ -365,7 +365,7 @@ struct h2get_mruby_frame {
 struct h2get_ctx;
 void h2get_ctx_init(struct h2get_ctx *ctx);
 bool h2get_ctx_is_server(struct h2get_ctx *ctx);
-int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_buf url_buf, const char **err);
+int h2get_connect(struct h2get_ctx *ctx, struct h2get_conn *conn, struct h2get_buf url_buf, char *servername, const char **err);
 int h2get_listen(struct h2get_ctx *ctx, struct h2get_buf url_buf, int backlog, const char **err);
 int h2get_accept(struct h2get_ctx *ctx, struct h2get_conn *conn, int timeout, const char **err);
 int h2get_destroy(struct h2get_ctx *ctx, const char **err);
