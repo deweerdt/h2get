@@ -494,8 +494,8 @@ static mrb_value h2get_mruby_conn_expect_prefix(mrb_state *mrb, mrb_value self)
 static mrb_value h2get_mruby_conn_send_rst_stream(mrb_state *mrb, mrb_value self)
 {
     int ret;
-    int timeout;
-    uint32_t stream_id, error_code;
+    int timeout = -1;
+    uint32_t stream_id = 0, error_code = 0;
     const char *err;
     mrb_value *argv;
     mrb_int argc, mrb_stream_id, mrb_error_code, mrb_timeout;
